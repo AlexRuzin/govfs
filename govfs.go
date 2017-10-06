@@ -51,8 +51,8 @@ const IRP_DELETE        int = 3 /* Delete a file/folder */
 const IRP_WRITE         int = 4 /* Write data to a file */
 const IRP_CREATE        int = 5 /* Create a new file or folder */
 
-const FLAG_FILE			int = 1
-const FLAG_DIRECTORY	int = 2
+const FLAG_FILE         int = 1
+const FLAG_DIRECTORY    int = 2
 
 type gofs_header struct {
     filename    string
@@ -92,11 +92,11 @@ func create_db(filename string) *gofs_header {
     go func (f *gofs_header) {
         for {
             var io = <- header.io_in
-			
+            
             switch io.status {
             case IRP_PURGE:
                 /* PURGE */
-				out("ERROR: PURGING")
+                out("ERROR: PURGING")
                 close(header.io_in)
                 return
             case IRP_DELETE:
@@ -117,8 +117,8 @@ func create_db(filename string) *gofs_header {
                 /* WRITE */
                 if i := f.check(io.name); i != nil {
                     if f.write_internal(i, io.data) != len(io.data) {
-						io.status = STATUS_OK
-						io.file.io_out <- io
+                        io.status = STATUS_OK
+                        io.file.io_out <- io
                     } else {
                         io.status = STATUS_ERROR
                         io.file.io_out <- io
@@ -128,25 +128,25 @@ func create_db(filename string) *gofs_header {
                 io.status = STATUS_ERROR
                 io.file.io_out <- io
             case IRP_CREATE: 
-				if f.check(io.name) != nil {
-					io.status = STATUS_ERROR
-					io.file.io_out <- io					
-				}
-			
-				f.meta[s(io.name)] = new(gofs_file)
-				io.file = f.meta[s(io.name)]				
-				io.file.filename = io.name
-				
-				if string(io.name[len(io.name) - 1:]) == "/" {
-					io.file.filetype = FLAG_DIRECTORY
-				} else {
-					io.file.filetype = FLAG_FILE
-				}
+                if f.check(io.name) != nil {
+                    io.status = STATUS_ERROR
+                    io.file.io_out <- io                    
+                }
+            
+                f.meta[s(io.name)] = new(gofs_file)
+                io.file = f.meta[s(io.name)]                
+                io.file.filename = io.name
+                
+                if string(io.name[len(io.name) - 1:]) == "/" {
+                    io.file.filetype = FLAG_DIRECTORY
+                } else {
+                    io.file.filetype = FLAG_FILE
+                }
                 
                 /* Recursively create all subdirectory files */
-				/* FIXME/ADDME */
-				io.status = STATUS_OK
-				io.create_io <- io
+                /* FIXME/ADDME */
+                io.status = STATUS_OK
+                io.create_io <- io
             }
         }
     } (header)
@@ -268,8 +268,8 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
         return irp
     }
 
-	
-	
+    
+    
     return nil
 }
 
@@ -280,17 +280,17 @@ func (f *gofs_header) create(name string) *gofs_file {
     }   
     var irp *gofs_io_block = f.generate_irp(name, nil, IRP_CREATE)
     
-	out("testt3")
-	if f.io_in == nil {
-		out("FAIL")
-	}
+    out("testt3")
+    if f.io_in == nil {
+        out("FAIL")
+    }
     f.io_in <- irp
-	out("d:" + irp.name)
+    out("d:" + irp.name)
     output_irp := <- irp.create_io
     if output_irp.file == nil {
         return nil
     }
-	close(output_irp.create_io)
+    close(output_irp.create_io)
 
     return output_irp.file
 }
