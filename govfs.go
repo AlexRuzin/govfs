@@ -4,7 +4,7 @@ package gofs
 // create() can either create a folder or a file. 
 // When a folder/file is created, make all subdirectories in the map as well
 
-/* TEST4
+/* TEST5
  * Supports:
  *  [+] UTF=8 file names <- not yet
  *  [+] 2^128 files
