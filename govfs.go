@@ -69,6 +69,7 @@ type gofs_file struct {
     datasum     string
     data        []byte
     io_out      chan *gofs_io_block
+	io_state	bool /* false == closed channel */
 }
 
 type gofs_io_block struct {
@@ -126,6 +127,7 @@ func create_db(filename string) *gofs_header {
                 }
                 /* File doesn't exist */
                 io.status = STATUS_ERROR
+				out("testasdfasdf " + io.name)
                 io.file.io_out <- io
             case IRP_CREATE: 
                 if f.check(io.name) != nil {
@@ -213,10 +215,11 @@ func (f *gofs_header) check(name string) *gofs_file {
 }
 
 func (f *gofs_header) wait_for_irp_channel(file *gofs_file) chan *gofs_io_block {
-    for file.io_out != nil {
+    for file.io_state == true {
         time.Sleep(10)
     }
     file.io_out = make(chan *gofs_io_block)
+	file.io_state = true
 
     return file.io_out
 }
@@ -266,9 +269,7 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
         irp.create_io = make(chan *gofs_io_block)
         
         return irp
-    }
-
-    
+    }   
     
     return nil
 }
@@ -281,16 +282,13 @@ func (f *gofs_header) create(name string) *gofs_file {
     var irp *gofs_io_block = f.generate_irp(name, nil, IRP_CREATE)
     
     out("testt3")
-    if f.io_in == nil {
-        out("FAIL")
-    }
     f.io_in <- irp
     out("d:" + irp.name)
     output_irp := <- irp.create_io
+	defer close(output_irp.create_io)
     if output_irp.file == nil {
         return nil
     }
-    close(output_irp.create_io)
 
     return output_irp.file
 }
@@ -329,6 +327,7 @@ func (f *gofs_header) write(name string, d []byte) int {
     if irp == nil {
         return STATUS_ERROR /* FAILURE */
     }
+	defer close_channel(irp.file)
 
     /*
      * Send the write request IRP and receive the response
@@ -337,8 +336,6 @@ func (f *gofs_header) write(name string, d []byte) int {
     f.io_in <- irp
     var output_irp = <- irp.file.io_out
 
-    close(irp.file.io_out)
-    irp.file.io_out = nil
     if output_irp.status != STATUS_OK {
         return STATUS_ERROR /* failed */
     }
@@ -366,6 +363,11 @@ func (f *gofs_header) write_internal(d *gofs_file, data []byte) int {
 
 func (f *gofs_header) get_total_filesizes() uint {
     return f.t_size
+}
+
+func close_channel(file *gofs_file) {
+	close(file.io_out)
+	file.io_state = false
 }
 
 /* Returns an md5sum of a string */
