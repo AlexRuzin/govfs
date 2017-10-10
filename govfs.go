@@ -41,6 +41,7 @@ import (
     "compress/gzip"
     "bytes"
 	"sync"
+    "strings"
 )
 
 const STATUS_ERROR      int = -1
@@ -141,7 +142,25 @@ func create_db(filename string) *gofs_header {
                 }
                 
                 /* Recursively create all subdirectory files */
-                /* FIXME/ADDME */
+                sub_strings := strings.Split(io.name, "/")
+                sub_array := make([]string, len(sub_strings) - 2)
+                copy(sub_array, sub_strings[1:len(sub_strings) - 1]) /* We do not need the first/last file */
+                var tmp string = ""
+                for e := range sub_array {
+                    tmp += "/" + sub_array[e]
+
+                    /* Create a subdirectory header */
+                    func (sub_directory string, f *gofs_header) {
+                        if t := f.check(sub_directory); t != nil {
+                            return
+                        }
+
+                        f.meta[s(tmp)] = new (gofs_file)
+                        f.meta[s(tmp)].filename = sub_directory
+                        f.meta[s(tmp)].filetype = FLAG_DIRECTORY
+                    } (tmp, f)
+                }
+
                 io.status = STATUS_OK
                 io.io_out <- io
             }

@@ -58,7 +58,15 @@ func TestIOSanity(t *testing.T) {
         drive_fail("TEST4: Cannot write to a nonexistant file", t)
     }
 	out("[+] Test 4 PASS")
-	
+
+	/*
+	 * Create empty file file9
+	 */
+	if file, err := header.create("/folder5/folder4/folder2/file9"); file == nil || err == STATUS_ERROR {
+		drive_fail("TEST4.1: file9 cannot be created", t)
+	}
+	out("[+] Test 4.1 PASS")
+
     /*
      * Attempt to create a new file0
      */
