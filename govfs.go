@@ -102,6 +102,7 @@ func create_db(filename string) *gofs_header {
                 return
             case IRP_DELETE:
                 /* DELETE */
+                // FIXME/ADDME
                 io.status = STATUS_ERROR
                 if io.file.filename == "/" { /* Cannot delete the root file */
                     io.status = STATUS_ERROR
@@ -118,7 +119,7 @@ func create_db(filename string) *gofs_header {
                 /* WRITE */
                 if i := f.check(io.name); i != nil {
 					io.file.lock.Lock()
-                    if f.write_internal(i, io.data) != len(io.data) {
+                    if f.write_internal(i, io.data) == len(io.data) {
                         io.status = STATUS_OK
 						io.file.lock.Unlock()
                         io.io_out <- io
@@ -342,7 +343,9 @@ func (f *gofs_header) write_internal(d *gofs_file, data []byte) int {
     copy(d.data, data)
     d.datasum = s(string(data))
 
-    return len(d.data)
+    datalen := len(d.data)
+
+    return datalen
 }
 
 func (f *gofs_header) get_total_filesizes() uint {
