@@ -38,12 +38,13 @@ import (
     "fmt"
     "crypto/md5"
     "encoding/hex"
-    "time"
     "compress/gzip"
     "bytes"
+	"sync"
 )
 
 const STATUS_ERROR      int = -1
+const STATUS_EXISTS		int = -2
 const STATUS_OK         int = 0
 
 const IRP_PURGE         int = 2 /* Flush the entire database and all files */
@@ -60,16 +61,15 @@ type gofs_header struct {
     meta        map[string]*gofs_file
     t_size      uint /* Total size of all files */
     io_in       chan *gofs_io_block
+	create_sync	sync.Mutex
 }
 
 type gofs_file struct {
-    fsheader    *gofs_header
     filename    string
     filetype    int /* FLAG_FILE, FLAG_DIRECTORY */
     datasum     string
     data        []byte
-    io_out      chan *gofs_io_block
-	io_state	bool /* false == closed channel */
+	lock		sync.Mutex
 }
 
 type gofs_io_block struct {
@@ -78,11 +78,11 @@ type gofs_io_block struct {
     data        []byte
     status      int /* 0 == fail, 1 == ok, 2 == purge, 3 == delete, 4 == write */
     flags       int
-    create_io   chan *gofs_io_block /* Used only for IRP_CREATE, since no gofs_file exists yet */
+    io_out      chan *gofs_io_block
 }
 
 func create_db(filename string) *gofs_header {
-    header                          := new(gofs_header)
+    var header                      = new(gofs_header)
     header.filename                 = filename
     header.meta                     = make(map[string]*gofs_file)
     header.meta[s("/")]             = new(gofs_file)
@@ -105,36 +105,30 @@ func create_db(filename string) *gofs_header {
                 io.status = STATUS_ERROR
                 if io.file.filename == "/" { /* Cannot delete the root file */
                     io.status = STATUS_ERROR
-                    io.file.io_out <- io
+                    io.io_out <- io
                 } else {
                     if i := f.check(io.name); i != nil {
                         delete(f.meta, s(io.name))
                         f.meta[s(io.name)] = nil
                         io.status = STATUS_OK
                     }
-                    io.file.io_out <- io
+                    io.io_out <- io
                 }
             case IRP_WRITE:
                 /* WRITE */
                 if i := f.check(io.name); i != nil {
+					io.file.lock.Lock()
                     if f.write_internal(i, io.data) != len(io.data) {
                         io.status = STATUS_OK
-                        io.file.io_out <- io
+						io.file.lock.Unlock()
+                        io.io_out <- io
                     } else {
                         io.status = STATUS_ERROR
-                        io.file.io_out <- io
+						io.file.lock.Unlock()
+                        io.io_out <- io
                     }
                 }
-                /* File doesn't exist */
-                io.status = STATUS_ERROR
-				out("testasdfasdf " + io.name)
-                io.file.io_out <- io
-            case IRP_CREATE: 
-                if f.check(io.name) != nil {
-                    io.status = STATUS_ERROR
-                    io.file.io_out <- io                    
-                }
-            
+            case IRP_CREATE:          
                 f.meta[s(io.name)] = new(gofs_file)
                 io.file = f.meta[s(io.name)]                
                 io.file.filename = io.name
@@ -148,7 +142,7 @@ func create_db(filename string) *gofs_header {
                 /* Recursively create all subdirectory files */
                 /* FIXME/ADDME */
                 io.status = STATUS_OK
-                io.create_io <- io
+                io.io_out <- io
             }
         }
     } (header)
@@ -189,7 +183,7 @@ func (f *gofs_header) unmount_db(filename *string) int {
     total_files := f.get_file_count() - 1
     for total_files != 0 {
         var header = <- commit_ch
-        out("last: " + header.file.filename)
+		out("inbound: " + header.file.filename)
         total_files -= 1
     }
 
@@ -214,16 +208,6 @@ func (f *gofs_header) check(name string) *gofs_file {
     return nil
 }
 
-func (f *gofs_header) wait_for_irp_channel(file *gofs_file) chan *gofs_io_block {
-    for file.io_state == true {
-        time.Sleep(10)
-    }
-    file.io_out = make(chan *gofs_io_block)
-	file.io_state = true
-
-    return file.io_out
-}
-
 func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs_io_block {
     switch irp_type {
     case IRP_DELETE:
@@ -233,11 +217,10 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
             return nil /* ERROR -- deleting non-existant file */
         }
 
-        file_header.io_out = f.wait_for_irp_channel(file_header)
-
         irp := new(gofs_io_block)
         irp.file = file_header
         irp.name = name
+		irp.io_out = make(chan *gofs_io_block)
 
         irp.status = IRP_DELETE
 
@@ -249,12 +232,11 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
             return nil
         }
 
-        file_header.io_out = f.wait_for_irp_channel(file_header)
-
         irp := new(gofs_io_block)
         irp.file = file_header
         irp.name = name
         irp.data = make([]byte, len(data))
+		irp.io_out = make(chan *gofs_io_block)
         copy(irp.data, data)
 
         irp.status = IRP_WRITE /* write IRP request */
@@ -266,31 +248,30 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
         irp := new(gofs_io_block)
         irp.name = name
         irp.status = IRP_CREATE
-        irp.create_io = make(chan *gofs_io_block)
+        irp.io_out = make(chan *gofs_io_block)
         
         return irp
-    }   
+    }    
     
     return nil
 }
 
-func (f *gofs_header) create(name string) *gofs_file {
-    file := f.check(name)
-    if file != nil {
-        return file
-    }   
+func (f *gofs_header) create(name string) (*gofs_file, int) {
+    if file := f.check(name); file != nil {
+        return nil, STATUS_EXISTS
+    }  
+	f.create_sync.Lock()
     var irp *gofs_io_block = f.generate_irp(name, nil, IRP_CREATE)
     
-    out("testt3")
     f.io_in <- irp
-    out("d:" + irp.name)
-    output_irp := <- irp.create_io
-	defer close(output_irp.create_io)
+    output_irp := <- irp.io_out
+	f.create_sync.Unlock()
     if output_irp.file == nil {
-        return nil
+        return nil, STATUS_ERROR
     }
+    close(output_irp.io_out)
 
-    return output_irp.file
+    return output_irp.file, STATUS_OK
 }
 
 func (f *gofs_header) read(name string) []byte {
@@ -311,10 +292,9 @@ func (f *gofs_header) delete(name string) int {
     }
 
     f.io_in <- irp
-    var output_irp = <- irp.file.io_out
+    var output_irp = <- irp.io_out
 
-    close(irp.file.io_out)
-    irp.file.io_out = nil
+    close(irp.io_out)
     if output_irp.status != STATUS_OK {
         return STATUS_ERROR /* failed */
     }
@@ -323,19 +303,23 @@ func (f *gofs_header) delete(name string) int {
 }
 
 func (f *gofs_header) write(name string, d []byte) int {
+	if i := f.check(name); i == nil {
+		return STATUS_ERROR
+	}
+	
     irp := f.generate_irp(name, d, IRP_WRITE)
     if irp == nil {
         return STATUS_ERROR /* FAILURE */
     }
-	defer close_channel(irp.file)
 
     /*
      * Send the write request IRP and receive the response
      *  IRP indicating the write status of the request
      */
     f.io_in <- irp
-    var output_irp = <- irp.file.io_out
+    var output_irp = <- irp.io_out
 
+    close(irp.io_out)
     if output_irp.status != STATUS_OK {
         return STATUS_ERROR /* failed */
     }
@@ -363,11 +347,6 @@ func (f *gofs_header) write_internal(d *gofs_file, data []byte) int {
 
 func (f *gofs_header) get_total_filesizes() uint {
     return f.t_size
-}
-
-func close_channel(file *gofs_file) {
-	close(file.io_out)
-	file.io_state = false
 }
 
 /* Returns an md5sum of a string */
