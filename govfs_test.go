@@ -150,7 +150,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Attempt to create a new file5. This will be a blank file
      */
-    if file, err := header.create("/folder2/file5"); file == nil || err == STATUS_ERROR {
+    if file, err := header.create("/folder2/file7"); file == nil || err == STATUS_ERROR {
         drive_fail("TEST13: file3 cannot be created", t)
     }
 	out("[+] Test 13 PASS")
@@ -158,6 +158,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Delete file0 -- complete this
      */
+	// FIXME/ADDME
 	 
 	/*
 	 * Create just a folder
