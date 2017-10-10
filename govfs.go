@@ -44,17 +44,19 @@ import (
     "strings"
 )
 
-const STATUS_ERROR      int = -1
-const STATUS_EXISTS		int = -2
-const STATUS_OK         int = 0
+const STATUS_OK                 int = 0
+const STATUS_ERROR              int = -1
+const STATUS_EXISTS		        int = -2
+const STATUS_NOT_FOUND          int = -3
+const STATUS_NOT_READABLE       int = -4
 
-const IRP_PURGE         int = 2 /* Flush the entire database and all files */
-const IRP_DELETE        int = 3 /* Delete a file/folder */
-const IRP_WRITE         int = 4 /* Write data to a file */
-const IRP_CREATE        int = 5 /* Create a new file or folder */
+const IRP_PURGE                 int = 2 /* Flush the entire database and all files */
+const IRP_DELETE                int = 3 /* Delete a file/folder */
+const IRP_WRITE                 int = 4 /* Write data to a file */
+const IRP_CREATE                int = 5 /* Create a new file or folder */
 
-const FLAG_FILE         int = 1
-const FLAG_DIRECTORY    int = 2
+const FLAG_FILE                 int = 1
+const FLAG_DIRECTORY            int = 2
 
 type gofs_header struct {
     filename    string
@@ -294,15 +296,19 @@ func (f *gofs_header) create(name string) (*gofs_file, int) {
     return output_irp.file, STATUS_OK
 }
 
-func (f *gofs_header) read(name string) []byte {
+func (f *gofs_header) read(name string) ([]byte, int) {
     var file_header = f.check(name)
     if file_header == nil {
-        return nil
+        return nil, STATUS_NOT_FOUND
+    }
+
+    if file_header.filetype == FLAG_DIRECTORY {
+        return nil, STATUS_NOT_READABLE
     }
 
     output := make([]byte, len(file_header.data))
     copy(output, file_header.data)
-    return output
+    return output, STATUS_OK
 }
 
 func (f *gofs_header) delete(name string) int {
