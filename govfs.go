@@ -58,6 +58,7 @@ const STATUS_NOT_FOUND          int = -3
 const STATUS_NOT_READABLE       int = -4
 const STATUS_NAME_EXCEEDED		int = -5 /* Input name is too long for create() */
 const STATUS_FS_WRITE			int = -6 /* Failure in serializing and writing the filesystem */
+const STATUS_FS_ENC_COMP		int = -7 /* Compression/encryption failure FIXME -- separate these two */
 
 const IRP_PURGE                 int = 2 /* Flush the entire database and all files */
 const IRP_DELETE                int = 3 /* Delete a file/folder */
@@ -66,6 +67,8 @@ const IRP_CREATE                int = 5 /* Create a new file or folder */
 
 const FLAG_FILE                 int = 1
 const FLAG_DIRECTORY            int = 2
+const FLAG_COMPRESS				int = 4 /* Compression on the fs serialized output */
+const FLAG_ENCRYPT				int = 8 /* Encryption on the fs serialized output */
 
 type gofs_header struct {
     filename    string
@@ -450,14 +453,25 @@ func (f *gofs_header) unmount_db(filename *string) int {
 	close(commit_ch)
 
 	/* Compress, encrypt, and write stream */
-	if k, l := f.write_fs_stream(f.filename, stream); k != uint(stream.Len()) || l != STATUS_OK {
+	if k, l := f.write_fs_stream(f.filename, stream, FLAG_COMPRESS | FLAG_ENCRYPT); k != uint(stream.Len()) || l != STATUS_OK {
 		return STATUS_FS_WRITE
 	}
 
 	return STATUS_OK
 }
 
-func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer) (uint, int) {
+func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int) (uint, int) {
+	if flags != FLAG_ENCRYPT | FLAG_COMPRESS {
+		return 0, STATUS_FS_ENC_COMP // FIXME
+	}
+
+	var compressed *bytes.Buffer = new(bytes.Buffer)
+	w := gzip.NewWriter(compressed)
+	w.Write(data.Bytes())
+	w.Close()
+
+
+
 	return 0, 0
 }
 
