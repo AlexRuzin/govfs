@@ -38,6 +38,7 @@ import (
     "fmt"
     "crypto/md5"
     "encoding/hex"
+    "encoding/gob"
     "compress/gzip"
     "bytes"
 	"sync"
@@ -56,6 +57,7 @@ const STATUS_EXISTS		        int = -2
 const STATUS_NOT_FOUND          int = -3
 const STATUS_NOT_READABLE       int = -4
 const STATUS_NAME_EXCEEDED		int = -5 /* Input name is too long for create() */
+const STATUS_FS_WRITE			int = -6 /* Failure in serializing and writing the filesystem */
 
 const IRP_PURGE                 int = 2 /* Flush the entire database and all files */
 const IRP_DELETE                int = 3 /* Delete a file/folder */
@@ -337,17 +339,17 @@ func (f *gofs_header) write_internal(d *gofs_file, data []byte) int {
 }
 
 func (f *gofs_header) unmount_db(filename *string) int {
-	type raw_file struct {
-		raw_sum [16]byte
-		gzip_size uint
-		flags int
-		name [MAX_FILENAME_LENGTH]byte
+	type RawFile /* Capitalize for the sake of exporting */ struct {
+		RawSum [16]byte
+		GZIPSize uint
+		Flags int
+		Name [MAX_FILENAME_LENGTH]byte
 	}
 
 	type comp_data struct {
 		file *gofs_file
 		data_compressed []byte
-		raw raw_file
+		raw RawFile
 	}
 
 	commit_ch := make(chan *comp_data)
@@ -373,25 +375,25 @@ func (f *gofs_header) unmount_db(filename *string) int {
 				d.data_compressed = make([]byte, buf.Len())
 				buf.Write(d.data_compressed)
 
-				d.raw.raw_sum = md5.Sum(d.file.data)
-				d.raw.gzip_size = uint(len(d.data_compressed))
-				d.raw.flags = FLAG_FILE
-				copy(d.raw.name[:], d.file.filename)
+				d.raw.RawSum = md5.Sum(d.file.data)
+				d.raw.GZIPSize = uint(len(d.data_compressed))
+				d.raw.Flags = FLAG_FILE
+				copy(d.raw.Name[:], d.file.filename)
 
                 commit_ch <- d
 			}
 
 			if d.file.filetype == FLAG_DIRECTORY {
 			    /* Directory type file. No need for compression, but the metadata must exist */
-			    d.raw.flags = FLAG_DIRECTORY
-			    copy(d.raw.name[:], d.file.filename)
+			    d.raw.Flags = FLAG_DIRECTORY
+			    copy(d.raw.Name[:], d.file.filename)
 			    commit_ch <- d
             }
 
             if d.file.filetype == FLAG_FILE && len(d.file.data) == 0 {
                 /* Empty file. Does not need compression but metadata must exist */
-                d.raw.flags = FLAG_FILE
-                copy(d.raw.name[:], d.file.filename)
+                d.raw.Flags = FLAG_FILE
+                copy(d.raw.Name[:], d.file.filename)
                 commit_ch <- d
             }
 		}(header)
@@ -404,26 +406,60 @@ func (f *gofs_header) unmount_db(filename *string) int {
 	 * Generate the primary filesystem header and write it to the fs_stream
 	 */
     type fs_header struct {
-        sig [64]byte
-        file_count uint
+        Signature string /* Uppercase so that it's "exported" i.e. visibile to the encoder */
+        FileCount uint
     }
-    var hdr *fs_header = new(fs_header)
-    hdr.file_count = total_files
-    copy(hdr.sig[:], FS_SIGNATURE)
+    hdr := fs_header {
+		Signature: 	FS_SIGNATURE, /* This signature may be modified in the configuration -- FIXME */
+		FileCount: 	total_files }
+
+    /* Serializer for fs_header */
+    stream := func (object interface{}) *bytes.Buffer {
+    	b := new(bytes.Buffer)
+    	e := gob.NewEncoder(b)
+    	if err := e.Encode(object); err != nil {
+    		return nil /* Failure in encoding the fs_header structure -- Should not happen */
+		}
+
+    	return b
+	} (hdr)
+	out(string(len(stream.Bytes())))
 
 	for total_files != 0 {
 		var header = <- commit_ch
 		out("inbound: " + header.file.filename)
 
-		/* Add each raw_file header followed by the compressed buffer directly into the stream */
+		/* Append the header */
+		serialized_fileheader := func (object interface{}) *bytes.Buffer {
+			b := new(bytes.Buffer)
+			e := gob.NewEncoder(b)
+			if err := e.Encode(object); err != nil {
+				return nil /* This should be an assertion -- FIXME */
+			}
+			return b
+		} (header.raw) /* Pass in RawFile */
+		stream.Write(serialized_fileheader.Bytes())
+		out(string(len(stream.Bytes())))
+
+		/* Append the compressed data */
+		stream.Write(header.data_compressed)
 
 		total_files -= 1
 	}
 
 	close(commit_ch)
+
+	/* Compress, encrypt, and write stream */
+	if k, l := f.write_fs_stream(f.filename, stream); k != uint(stream.Len()) || l != STATUS_OK {
+		return STATUS_FS_WRITE
+	}
+
 	return STATUS_OK
 }
 
+func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer) (uint, int) {
+	return 0, 0
+}
 
 func (f *gofs_header) get_file_count() uint {
     var total uint = 0
