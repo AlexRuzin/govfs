@@ -48,6 +48,7 @@ import (
  * Configurable constants
  */
 const MAX_FILENAME_LENGTH		int = 256
+const FS_SIGNATURE              string = "govfs_header" /* Cannot exceed 64 */
 
 const STATUS_OK                 int = 0
 const STATUS_ERROR              int = -1
@@ -177,15 +178,6 @@ func create_db(filename string) *gofs_header {
     } (header)
 
     return header
-}
-
-func (f *gofs_header) get_file_count() uint {
-    var total uint = 0
-    for range f.meta {
-        total += 1
-    }
-    
-    return total
 }
 
 func (f *gofs_header) check(name string) *gofs_file {
@@ -348,13 +340,13 @@ func (f *gofs_header) unmount_db(filename *string) int {
 	type raw_file struct {
 		raw_sum [16]byte
 		gzip_size uint
-		filetype int
+		flags int
 		name [MAX_FILENAME_LENGTH]byte
 	}
 
 	type comp_data struct {
 		file *gofs_file
-		data_compressed bytes.Buffer
+		data_compressed []byte
 		raw raw_file
 	}
 
@@ -373,24 +365,85 @@ func (f *gofs_header) unmount_db(filename *string) int {
 			 */
 			if d.file.filetype == FLAG_FILE /* File */ && len(d.file.data) > 0 {
 				/* Compression required since this is a file, and it's length is > 0 */
-				w := gzip.NewWriter(&d.data_compressed)
+				var buf *bytes.Buffer = new(bytes.Buffer)
+				w := gzip.NewWriter(buf)
 				w.Write(d.file.data)
 				w.Close()
+
+				d.data_compressed = make([]byte, buf.Len())
+				buf.Write(d.data_compressed)
+
+				d.raw.raw_sum = md5.Sum(d.file.data)
+				d.raw.gzip_size = uint(len(d.data_compressed))
+				d.raw.flags = FLAG_FILE
+				copy(d.raw.name[:], d.file.filename)
+
+                commit_ch <- d
 			}
-			commit_ch <- d
+
+			if d.file.filetype == FLAG_DIRECTORY {
+			    /* Directory type file. No need for compression, but the metadata must exist */
+			    d.raw.flags = FLAG_DIRECTORY
+			    copy(d.raw.name[:], d.file.filename)
+			    commit_ch <- d
+            }
+
+            if d.file.filetype == FLAG_FILE && len(d.file.data) == 0 {
+                /* Empty file. Does not need compression but metadata must exist */
+                d.raw.flags = FLAG_FILE
+                copy(d.raw.name[:], d.file.filename)
+                commit_ch <- d
+            }
 		}(header)
 	}
 
 	/* Do not count "/" as a file, since it is not sent in channel */
 	total_files := f.get_file_count() - 1
+
+	/*
+	 * Generate the primary filesystem header and write it to the fs_stream
+	 */
+    var fs_stream []byte /* Contains the raw data of the filesystem stream including all headers & data */
+    type fs_header struct {
+        sig [64]byte
+        file_count uint
+    }
+    var hdr *fs_header = new(fs_header)
+    hdr.file_count = total_files
+    copy(hdr.sig[:], FS_SIGNATURE)
+    fs_stream = append(fs_stream, hdr)
+
+
 	for total_files != 0 {
-		var _ = <- commit_ch
-		//out("inbound: " + header.file.filename)
+		var header = <- commit_ch
+		out("inbound: " + header.file.filename)
+
+		/* Add each raw_file header followed by the compressed buffer directly into the stream */
+
 		total_files -= 1
 	}
 
 	close(commit_ch)
 	return STATUS_OK
+}
+
+
+func (f *gofs_header) get_file_count() uint {
+    var total uint = 0
+    for range f.meta {
+        total += 1
+    }
+
+    return total
+}
+
+func (f *gofs_header) get_file_size(name string) (uint, int) {
+    file := f.check(name)
+    if file == nil {
+        return 0, STATUS_NOT_FOUND
+    }
+
+    return uint(len(file.data)), STATUS_OK
 }
 
 func (f *gofs_header) get_total_filesizes() uint {

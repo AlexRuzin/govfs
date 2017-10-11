@@ -93,6 +93,13 @@ func TestIOSanity(t *testing.T) {
     }
     out("[+] Test 6 PASS")
 
+    /*
+     * Check that the size of file0 is 4
+     */
+    if k, _ := header.get_file_size("/folder0/folder0/file0"); k != uint(len(data)) {
+        drive_fail("TEST6.1: The size of data does not match", t)
+    }
+    out("[+] Test 6.1 PASS")
     
     /*
      * Attempt to create a new file3
