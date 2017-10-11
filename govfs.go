@@ -44,11 +44,17 @@ import (
     "strings"
 )
 
+/*
+ * Configurable constants
+ */
+const MAX_FILENAME_LENGTH		int = 256
+
 const STATUS_OK                 int = 0
 const STATUS_ERROR              int = -1
 const STATUS_EXISTS		        int = -2
 const STATUS_NOT_FOUND          int = -3
 const STATUS_NOT_READABLE       int = -4
+const STATUS_NAME_EXCEEDED		int = -5 /* Input name is too long for create() */
 
 const IRP_PURGE                 int = 2 /* Flush the entire database and all files */
 const IRP_DELETE                int = 3 /* Delete a file/folder */
@@ -173,47 +179,6 @@ func create_db(filename string) *gofs_header {
     return header
 }
 
-func (f *gofs_header) unmount_db(filename *string) int {
-    type comp_data struct {
-        file *gofs_file
-        data_compressed bytes.Buffer
-    }
-
-    commit_ch := make(chan *comp_data)
-    for k := range f.meta {
-        header := new(comp_data)
-        header.file = f.meta[k]
-
-        go func (d *comp_data) {
-            if d.file.filename == "/" {
-                return
-            }
-            
-            /*
-             * Perform compression of the file, and store it in 'd' 
-             */   
-            if d.file.filetype == FLAG_FILE /* File */ && len(d.file.data) > 0 {
-                /* Compression required since this is a file, and it's length is > 0 */
-                w := gzip.NewWriter(&d.data_compressed)
-                w.Write(d.file.data)
-                w.Close()
-            }
-            commit_ch <- d            
-        }(header)
-    }
-    
-    /* Do not count "/" as a file, since it is not sent in channel */
-    total_files := f.get_file_count() - 1
-    for total_files != 0 {
-        var header = <- commit_ch
-		out("inbound: " + header.file.filename)
-        total_files -= 1
-    }
-
-    close(commit_ch)
-    return STATUS_OK
-}
-
 func (f *gofs_header) get_file_count() uint {
     var total uint = 0
     for range f.meta {
@@ -282,7 +247,12 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
 func (f *gofs_header) create(name string) (*gofs_file, int) {
     if file := f.check(name); file != nil {
         return nil, STATUS_EXISTS
-    }  
+    }
+
+    if len(name) > MAX_FILENAME_LENGTH {
+    	return nil, STATUS_NAME_EXCEEDED
+	}
+
 	f.create_sync.Lock()
     var irp *gofs_io_block = f.generate_irp(name, nil, IRP_CREATE)
     
@@ -372,6 +342,55 @@ func (f *gofs_header) write_internal(d *gofs_file, data []byte) int {
     datalen := len(d.data)
 
     return datalen
+}
+
+func (f *gofs_header) unmount_db(filename *string) int {
+	type raw_file struct {
+		raw_sum [16]byte
+		gzip_size uint
+		filetype int
+		name [MAX_FILENAME_LENGTH]byte
+	}
+
+	type comp_data struct {
+		file *gofs_file
+		data_compressed bytes.Buffer
+		raw raw_file
+	}
+
+	commit_ch := make(chan *comp_data)
+	for k := range f.meta {
+		header := new(comp_data)
+		header.file = f.meta[k]
+
+		go func (d *comp_data) {
+			if d.file.filename == "/" {
+				return
+			}
+
+			/*
+			 * Perform compression of the file, and store it in 'd'
+			 */
+			if d.file.filetype == FLAG_FILE /* File */ && len(d.file.data) > 0 {
+				/* Compression required since this is a file, and it's length is > 0 */
+				w := gzip.NewWriter(&d.data_compressed)
+				w.Write(d.file.data)
+				w.Close()
+			}
+			commit_ch <- d
+		}(header)
+	}
+
+	/* Do not count "/" as a file, since it is not sent in channel */
+	total_files := f.get_file_count() - 1
+	for total_files != 0 {
+		var _ = <- commit_ch
+		//out("inbound: " + header.file.filename)
+		total_files -= 1
+	}
+
+	close(commit_ch)
+	return STATUS_OK
 }
 
 func (f *gofs_header) get_total_filesizes() uint {
