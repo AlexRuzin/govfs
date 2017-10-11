@@ -35,6 +35,7 @@ package gofs
  */
 
 import (
+    "os"
     "fmt"
     "crypto/md5"
     "encoding/hex"
@@ -43,6 +44,8 @@ import (
     "bytes"
     "sync"
     "strings"
+    "crypto/aes"
+    "crypto/cipher"
 )
 
 /*
@@ -470,7 +473,16 @@ func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int
     w.Write(data.Bytes())
     w.Close()
 
+    /* The AES key will be the MD5 of the hostname string + the FS_SIGNATURE string */
+    _ := func () []byte {
+        host, _ := os.Hostname()
+        host += FS_SIGNATURE
 
+        sum := md5.Sum([]byte(host))
+        output := make([]byte, len(sum))
+        copy(output, sum[:])
+        return output
+    } ()
 
     return 0, 0
 }
