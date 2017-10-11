@@ -41,24 +41,24 @@ import (
     "encoding/gob"
     "compress/gzip"
     "bytes"
-	"sync"
+    "sync"
     "strings"
 )
 
 /*
  * Configurable constants
  */
-const MAX_FILENAME_LENGTH		int = 256
+const MAX_FILENAME_LENGTH       int = 256
 const FS_SIGNATURE              string = "govfs_header" /* Cannot exceed 64 */
 
 const STATUS_OK                 int = 0
 const STATUS_ERROR              int = -1
-const STATUS_EXISTS		        int = -2
+const STATUS_EXISTS             int = -2
 const STATUS_NOT_FOUND          int = -3
 const STATUS_NOT_READABLE       int = -4
-const STATUS_NAME_EXCEEDED		int = -5 /* Input name is too long for create() */
-const STATUS_FS_WRITE			int = -6 /* Failure in serializing and writing the filesystem */
-const STATUS_FS_ENC_COMP		int = -7 /* Compression/encryption failure FIXME -- separate these two */
+const STATUS_NAME_EXCEEDED      int = -5 /* Input name is too long for create() */
+const STATUS_FS_WRITE           int = -6 /* Failure in serializing and writing the filesystem */
+const STATUS_FS_ENC_COMP        int = -7 /* Compression/encryption failure FIXME -- separate these two */
 
 const IRP_PURGE                 int = 2 /* Flush the entire database and all files */
 const IRP_DELETE                int = 3 /* Delete a file/folder */
@@ -67,8 +67,8 @@ const IRP_CREATE                int = 5 /* Create a new file or folder */
 
 const FLAG_FILE                 int = 1
 const FLAG_DIRECTORY            int = 2
-const FLAG_COMPRESS				int = 4 /* Compression on the fs serialized output */
-const FLAG_ENCRYPT				int = 8 /* Encryption on the fs serialized output */
+const FLAG_COMPRESS             int = 4 /* Compression on the fs serialized output */
+const FLAG_ENCRYPT              int = 8 /* Encryption on the fs serialized output */
 
 type gofs_header struct {
     filename    string
@@ -76,7 +76,7 @@ type gofs_header struct {
     meta        map[string]*gofs_file
     t_size      uint /* Total size of all files */
     io_in       chan *gofs_io_block
-	create_sync	sync.Mutex
+    create_sync sync.Mutex
 }
 
 type gofs_file struct {
@@ -84,7 +84,7 @@ type gofs_file struct {
     filetype    int /* FLAG_FILE, FLAG_DIRECTORY */
     datasum     string
     data        []byte
-	lock		sync.Mutex
+    lock        sync.Mutex
 }
 
 type gofs_io_block struct {
@@ -133,14 +133,14 @@ func create_db(filename string) *gofs_header {
             case IRP_WRITE:
                 /* WRITE */
                 if i := f.check(io.name); i != nil {
-					io.file.lock.Lock()
+                    io.file.lock.Lock()
                     if f.write_internal(i, io.data) == len(io.data) {
                         io.status = STATUS_OK
-						io.file.lock.Unlock()
+                        io.file.lock.Unlock()
                         io.io_out <- io
                     } else {
                         io.status = STATUS_ERROR
-						io.file.lock.Unlock()
+                        io.file.lock.Unlock()
                         io.io_out <- io
                     }
                 }
@@ -205,7 +205,7 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
         irp := new(gofs_io_block)
         irp.file = file_header
         irp.name = name
-		irp.io_out = make(chan *gofs_io_block)
+        irp.io_out = make(chan *gofs_io_block)
 
         irp.status = IRP_DELETE
 
@@ -221,7 +221,7 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
         irp.file = file_header
         irp.name = name
         irp.data = make([]byte, len(data))
-		irp.io_out = make(chan *gofs_io_block)
+        irp.io_out = make(chan *gofs_io_block)
         copy(irp.data, data)
 
         irp.status = IRP_WRITE /* write IRP request */
@@ -247,15 +247,15 @@ func (f *gofs_header) create(name string) (*gofs_file, int) {
     }
 
     if len(name) > MAX_FILENAME_LENGTH {
-    	return nil, STATUS_NAME_EXCEEDED
-	}
+        return nil, STATUS_NAME_EXCEEDED
+    }
 
-	f.create_sync.Lock()
+    f.create_sync.Lock()
     var irp *gofs_io_block = f.generate_irp(name, nil, IRP_CREATE)
     
     f.io_in <- irp
     output_irp := <- irp.io_out
-	f.create_sync.Unlock()
+    f.create_sync.Unlock()
     if output_irp.file == nil {
         return nil, STATUS_ERROR
     }
@@ -297,10 +297,10 @@ func (f *gofs_header) delete(name string) int {
 }
 
 func (f *gofs_header) write(name string, d []byte) int {
-	if i := f.check(name); i == nil {
-		return STATUS_ERROR
-	}
-	
+    if i := f.check(name); i == nil {
+        return STATUS_ERROR
+    }
+    
     irp := f.generate_irp(name, d, IRP_WRITE)
     if irp == nil {
         return STATUS_ERROR /* FAILURE */
@@ -342,55 +342,55 @@ func (f *gofs_header) write_internal(d *gofs_file, data []byte) int {
 }
 
 func (f *gofs_header) unmount_db(filename *string) int {
-	type RawFile /* Capitalize for the sake of exporting */ struct {
-		RawSum [16]byte
-		GZIPSize uint
-		Flags int
-		Name [MAX_FILENAME_LENGTH]byte
-	}
+    type RawFile /* Capitalize for the sake of exporting */ struct {
+        RawSum [16]byte
+        GZIPSize uint
+        Flags int
+        Name [MAX_FILENAME_LENGTH]byte
+    }
 
-	type comp_data struct {
-		file *gofs_file
-		data_compressed []byte
-		raw RawFile
-	}
+    type comp_data struct {
+        file *gofs_file
+        data_compressed []byte
+        raw RawFile
+    }
 
-	commit_ch := make(chan *comp_data)
-	for k := range f.meta {
-		header := new(comp_data)
-		header.file = f.meta[k]
+    commit_ch := make(chan *comp_data)
+    for k := range f.meta {
+        header := new(comp_data)
+        header.file = f.meta[k]
 
-		go func (d *comp_data) {
-			if d.file.filename == "/" {
-				return
-			}
+        go func (d *comp_data) {
+            if d.file.filename == "/" {
+                return
+            }
 
-			/*
-			 * Perform compression of the file, and store it in 'd'
-			 */
-			if d.file.filetype == FLAG_FILE /* File */ && len(d.file.data) > 0 {
-				/* Compression required since this is a file, and it's length is > 0 */
-				var buf *bytes.Buffer = new(bytes.Buffer)
-				w := gzip.NewWriter(buf)
-				w.Write(d.file.data)
-				w.Close()
+            /*
+             * Perform compression of the file, and store it in 'd'
+             */
+            if d.file.filetype == FLAG_FILE /* File */ && len(d.file.data) > 0 {
+                /* Compression required since this is a file, and it's length is > 0 */
+                var buf *bytes.Buffer = new(bytes.Buffer)
+                w := gzip.NewWriter(buf)
+                w.Write(d.file.data)
+                w.Close()
 
-				d.data_compressed = make([]byte, buf.Len())
-				buf.Write(d.data_compressed)
+                d.data_compressed = make([]byte, buf.Len())
+                buf.Write(d.data_compressed)
 
-				d.raw.RawSum = md5.Sum(d.file.data)
-				d.raw.GZIPSize = uint(len(d.data_compressed))
-				d.raw.Flags = FLAG_FILE
-				copy(d.raw.Name[:], d.file.filename)
+                d.raw.RawSum = md5.Sum(d.file.data)
+                d.raw.GZIPSize = uint(len(d.data_compressed))
+                d.raw.Flags = FLAG_FILE
+                copy(d.raw.Name[:], d.file.filename)
 
                 commit_ch <- d
-			}
+            }
 
-			if d.file.filetype == FLAG_DIRECTORY {
-			    /* Directory type file. No need for compression, but the metadata must exist */
-			    d.raw.Flags = FLAG_DIRECTORY
-			    copy(d.raw.Name[:], d.file.filename)
-			    commit_ch <- d
+            if d.file.filetype == FLAG_DIRECTORY {
+                /* Directory type file. No need for compression, but the metadata must exist */
+                d.raw.Flags = FLAG_DIRECTORY
+                copy(d.raw.Name[:], d.file.filename)
+                commit_ch <- d
             }
 
             if d.file.filetype == FLAG_FILE && len(d.file.data) == 0 {
@@ -399,80 +399,80 @@ func (f *gofs_header) unmount_db(filename *string) int {
                 copy(d.raw.Name[:], d.file.filename)
                 commit_ch <- d
             }
-		}(header)
-	}
+        }(header)
+    }
 
-	/* Do not count "/" as a file, since it is not sent in channel */
-	total_files := f.get_file_count() - 1
+    /* Do not count "/" as a file, since it is not sent in channel */
+    total_files := f.get_file_count() - 1
 
-	/*
-	 * Generate the primary filesystem header and write it to the fs_stream
-	 */
+    /*
+     * Generate the primary filesystem header and write it to the fs_stream
+     */
     type fs_header struct {
         Signature string /* Uppercase so that it's "exported" i.e. visibile to the encoder */
         FileCount uint
     }
     hdr := fs_header {
-		Signature: 	FS_SIGNATURE, /* This signature may be modified in the configuration -- FIXME */
-		FileCount: 	total_files }
+        Signature:  FS_SIGNATURE, /* This signature may be modified in the configuration -- FIXME */
+        FileCount:  total_files }
 
     /* Serializer for fs_header */
     stream := func (object interface{}) *bytes.Buffer {
-    	b := new(bytes.Buffer)
-    	e := gob.NewEncoder(b)
-    	if err := e.Encode(object); err != nil {
-    		return nil /* Failure in encoding the fs_header structure -- Should not happen */
-		}
+        b := new(bytes.Buffer)
+        e := gob.NewEncoder(b)
+        if err := e.Encode(object); err != nil {
+            return nil /* Failure in encoding the fs_header structure -- Should not happen */
+        }
 
-    	return b
-	} (hdr)
-	out(string(len(stream.Bytes())))
+        return b
+    } (hdr)
+    out(string(len(stream.Bytes())))
 
-	for total_files != 0 {
-		var header = <- commit_ch
-		out("inbound: " + header.file.filename)
+    for total_files != 0 {
+        var header = <- commit_ch
+        out("inbound: " + header.file.filename)
 
-		/* Append the header */
-		serialized_fileheader := func (object interface{}) *bytes.Buffer {
-			b := new(bytes.Buffer)
-			e := gob.NewEncoder(b)
-			if err := e.Encode(object); err != nil {
-				return nil /* This should be an assertion -- FIXME */
-			}
-			return b
-		} (header.raw) /* Pass in RawFile */
-		stream.Write(serialized_fileheader.Bytes())
-		out(string(len(stream.Bytes())))
+        /* Append the header */
+        serialized_fileheader := func (object interface{}) *bytes.Buffer {
+            b := new(bytes.Buffer)
+            e := gob.NewEncoder(b)
+            if err := e.Encode(object); err != nil {
+                return nil /* This should be an assertion -- FIXME */
+            }
+            return b
+        } (header.raw) /* Pass in RawFile */
+        stream.Write(serialized_fileheader.Bytes())
+        out(string(len(stream.Bytes())))
 
-		/* Append the compressed data */
-		stream.Write(header.data_compressed)
+        /* Append the compressed data */
+        stream.Write(header.data_compressed)
 
-		total_files -= 1
-	}
+        total_files -= 1
+    }
 
-	close(commit_ch)
+    close(commit_ch)
 
-	/* Compress, encrypt, and write stream */
-	if k, l := f.write_fs_stream(f.filename, stream, FLAG_COMPRESS | FLAG_ENCRYPT); k != uint(stream.Len()) || l != STATUS_OK {
-		return STATUS_FS_WRITE
-	}
+    /* Compress, encrypt, and write stream */
+    if k, l := f.write_fs_stream(f.filename, stream, FLAG_COMPRESS | FLAG_ENCRYPT); k != uint(stream.Len()) || l != STATUS_OK {
+        return STATUS_FS_WRITE
+    }
 
-	return STATUS_OK
+    return STATUS_OK
 }
 
 func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int) (uint, int) {
-	if flags != FLAG_ENCRYPT | FLAG_COMPRESS {
-		return 0, STATUS_FS_ENC_COMP // FIXME
-	}
+    if flags != FLAG_ENCRYPT | FLAG_COMPRESS {
+        return 0, STATUS_FS_ENC_COMP // FIXME
+    }
 
-	var compressed *bytes.Buffer = new(bytes.Buffer)
-	w := gzip.NewWriter(compressed)
-	w.Write(data.Bytes())
-	w.Close()
+    var compressed *bytes.Buffer = new(bytes.Buffer)
+    w := gzip.NewWriter(compressed)
+    w.Write(data.Bytes())
+    w.Close()
 
 
 
-	return 0, 0
+    return 0, 0
 }
 
 func (f *gofs_header) get_file_count() uint {
