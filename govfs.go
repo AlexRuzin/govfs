@@ -31,7 +31,7 @@ package gofs
  *  [+] UTF=8 file names <- not yet
  *  [+] 2^128 files
  *  [+] o(1) seek/write time for metadata
- *
+ *  [+] There can be two files with the same name, but only if one is a directory
  */
 
 import (
@@ -153,12 +153,13 @@ func create_db(filename string) *gofs_header {
 
                     /* Create a subdirectory header */
                     func (sub_directory string, f *gofs_header) {
-                        if t := f.check(sub_directory); t != nil {
-                            return
+                        if f := f.check(sub_directory); f != nil {
+                            return /* There can exist two files with the same name,
+                                       as long as one is a directory and the other is a file */
                         }
 
-                        f.meta[s(tmp)] = new (gofs_file)
-                        f.meta[s(tmp)].filename = sub_directory
+                        f.meta[s(tmp)] = new(gofs_file)
+                        f.meta[s(tmp)].filename = sub_directory + "/" /* Explicit directory name */
                         f.meta[s(tmp)].filetype = FLAG_DIRECTORY
                     } (tmp, f)
                 }
@@ -375,6 +376,21 @@ func (f *gofs_header) write_internal(d *gofs_file, data []byte) int {
 
 func (f *gofs_header) get_total_filesizes() uint {
     return f.t_size
+}
+
+func (f *gofs_header) get_file_list() []string {
+    var output []string
+
+    for k := range f.meta {
+        file := f.meta[k]
+        if file.filetype == FLAG_DIRECTORY {
+            output = append(output, "(DIR)  " + file.filename)
+            continue
+        }
+        output = append(output, "(FILE) " + file.filename)
+    }
+
+    return output
 }
 
 /* Returns an md5sum of a string */

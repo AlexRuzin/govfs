@@ -184,7 +184,14 @@ func TestIOSanity(t *testing.T) {
         drive_fail("TEST16: Failed to commit database", t)
     }
     out("[+] Test 16 PASS")
-     
+
+    /*
+     * Print out files
+     */
+    file_list := header.get_file_list()
+    for _, e := range file_list {
+        out(e)
+    }
     
     time.Sleep(10000)
 }
