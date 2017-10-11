@@ -403,7 +403,6 @@ func (f *gofs_header) unmount_db(filename *string) int {
 	/*
 	 * Generate the primary filesystem header and write it to the fs_stream
 	 */
-    var fs_stream []byte /* Contains the raw data of the filesystem stream including all headers & data */
     type fs_header struct {
         sig [64]byte
         file_count uint
@@ -411,8 +410,6 @@ func (f *gofs_header) unmount_db(filename *string) int {
     var hdr *fs_header = new(fs_header)
     hdr.file_count = total_files
     copy(hdr.sig[:], FS_SIGNATURE)
-    fs_stream = append(fs_stream, hdr)
-
 
 	for total_files != 0 {
 		var header = <- commit_ch
