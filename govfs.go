@@ -380,10 +380,14 @@ func (f *gofs_header) unmount_db(filename *string) int {
              */
             if d.file.filetype == FLAG_FILE /* File */ && len(d.file.data) > 0 {
                 /* Compression required since this is a file, and it's length is > 0 */
-                var buf *bytes.Buffer = new(bytes.Buffer)
-                w := gzip.NewWriter(buf)
-                w.Write(d.file.data)
-                w.Close()
+                buf := func (data []byte) *bytes.Buffer {
+                    var output = new(bytes.Buffer)
+                    w := gzip.NewWriter(output)
+                    w.Write(d.file.data)
+                    w.Close()
+
+                    return output
+                } (d.file.data)
 
                 d.data_compressed = make([]byte, buf.Len())
                 buf.Write(d.data_compressed)
