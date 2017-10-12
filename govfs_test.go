@@ -25,12 +25,19 @@ package gofs
 import (
     "testing"
     "time"
+    "os"
 )
+
+const FS_DATABASE_FILE string = "test_db"
 
 func TestIOSanity(t *testing.T) {
     out("[+] Running Standard I/O Sanity Test...")
 
-    var header = create_db("<path>")
+    /* Remove the test database if it exists */
+    if _, err := os.Stat(FS_DATABASE_FILE); os.IsExist(err) {
+        os.Remove(FS_DATABASE_FILE)
+    }
+    var header = create_db(FS_DATABASE_FILE)
     if header == nil {
         drive_fail("TEST1: Failed to obtain header", t)
     }
@@ -187,7 +194,7 @@ func TestIOSanity(t *testing.T) {
      /*
       * Unmount/commit database to file
       */
-    if header.unmount_db(nil) != 0 {
+    if header.unmount_db() != 0 {
         drive_fail("TEST16: Failed to commit database", t)
     }
     out("[+] Test 16 PASS")

@@ -346,12 +346,7 @@ func (f *gofs_header) write_internal(d *gofs_file, data []byte) int {
     return datalen
 }
 
-func (f *gofs_header) unmount_db(filename *string) int {
-    var target_db_file *string = filename
-    if filename == nil {
-        target_db_file = &f.filename
-    }
-
+func (f *gofs_header) unmount_db() int {
     type RawFile /* Capitalize for the sake of exporting */ struct {
         RawSum [16]byte
         GZIPSize uint
@@ -464,7 +459,7 @@ func (f *gofs_header) unmount_db(filename *string) int {
     close(commit_ch)
 
     /* Compress, encrypt, and write stream */
-    if _, l := f.write_fs_stream(*target_db_file, stream, FLAG_COMPRESS | FLAG_ENCRYPT); l != STATUS_OK {
+    if _, l := f.write_fs_stream(f.filename, stream, FLAG_COMPRESS | FLAG_ENCRYPT); l != STATUS_OK {
         return STATUS_FS_WRITE
     }
 
