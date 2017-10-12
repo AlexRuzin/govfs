@@ -103,11 +103,21 @@ type gofs_io_block struct {
 }
 
 func create_db(filename string) *gofs_header {
-    var header *gofs_header = new(gofs_header)
-    header.filename = filename
-    header.meta = make(map[string]*gofs_file)
-    header.meta[s("/")] = new(gofs_file)
-    header.meta[s("/")].filename = "/"
+    var header *gofs_header
+
+    _, err := os.Stat(filename)
+    if os.IsExist(err) {
+        raw, _ := read_fs_stream(filename, FLAG_ENCRYPT|FLAG_COMPRESS)
+        header, _ = load_header(raw)
+    }
+
+    if os.IsNotExist(err) {
+        header = new(gofs_header)
+        header.filename = filename
+        header.meta = make(map[string]*gofs_file)
+        header.meta[s("/")] = new(gofs_file)
+        header.meta[s("/")].filename = "/"
+    }
 
     /* i/o channel processor. Performs i/o to the filesystem */
     header.io_in = make(chan *gofs_io_block)
@@ -467,7 +477,12 @@ func (f *gofs_header) unmount_db() int {
     return STATUS_OK
 }
 
-func (f *gofs_header) read_fs_stream(name string, flags int) ([]byte, int) {
+func load_header(data []byte) (*gofs_header, int) {
+    out(string(data))
+    return nil, STATUS_OK
+}
+
+func read_fs_stream(name string, flags int) ([]byte, int) {
     if flags != FLAG_COMPRESS | FLAG_ENCRYPT {
         return nil, STATUS_FS_DB_READ
     }
