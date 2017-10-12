@@ -46,6 +46,8 @@ import (
     "strings"
     "crypto/aes"
     "crypto/cipher"
+    "crypto/rand"
+    "io"
 )
 
 /*
@@ -345,6 +347,11 @@ func (f *gofs_header) write_internal(d *gofs_file, data []byte) int {
 }
 
 func (f *gofs_header) unmount_db(filename *string) int {
+    var target_db_file string = *filename
+    if filename == nil {
+        target_db_file = f.filename
+    }
+
     type RawFile /* Capitalize for the sake of exporting */ struct {
         RawSum [16]byte
         GZIPSize uint
@@ -429,11 +436,9 @@ func (f *gofs_header) unmount_db(filename *string) int {
 
         return b
     } (hdr)
-    out(string(len(stream.Bytes())))
 
     for total_files != 0 {
         var header = <- commit_ch
-        out("inbound: " + header.file.filename)
 
         /* Append the header */
         serialized_fileheader := func (object interface{}) *bytes.Buffer {
@@ -445,7 +450,6 @@ func (f *gofs_header) unmount_db(filename *string) int {
             return b
         } (header.raw) /* Pass in RawFile */
         stream.Write(serialized_fileheader.Bytes())
-        out(string(len(stream.Bytes())))
 
         /* Append the compressed data */
         stream.Write(header.data_compressed)
@@ -456,7 +460,7 @@ func (f *gofs_header) unmount_db(filename *string) int {
     close(commit_ch)
 
     /* Compress, encrypt, and write stream */
-    if k, l := f.write_fs_stream(f.filename, stream, FLAG_COMPRESS | FLAG_ENCRYPT); k != uint(stream.Len()) || l != STATUS_OK {
+    if _, l := f.write_fs_stream(target_db_file, stream, FLAG_COMPRESS | FLAG_ENCRYPT); l != STATUS_OK {
         return STATUS_FS_WRITE
     }
 
@@ -474,7 +478,7 @@ func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int
     w.Close()
 
     /* The AES key will be the MD5 of the hostname string + the FS_SIGNATURE string */
-    _ := func () []byte {
+    key := func () []byte {
         host, _ := os.Hostname()
         host += FS_SIGNATURE
 
@@ -484,7 +488,40 @@ func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int
         return output
     } ()
 
-    return 0, 0
+    /* Generate a pad of a 16byte blocksize */
+    pad := make([]byte, compressed.Len() + (aes.BlockSize - compressed.Len() % aes.BlockSize))
+    copy(pad, compressed.Bytes())
+
+    block, err := aes.NewCipher(key)
+    if err != nil {
+        return 0, STATUS_FS_ENC_COMP
+    }
+
+    ciphertext := make([]byte, aes.BlockSize + len(pad))
+    iv := ciphertext[:aes.BlockSize]
+    if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+        return 0, STATUS_FS_ENC_COMP
+    }
+
+    mode := cipher.NewCBCEncrypter(block, iv)
+    mode.CryptBlocks(ciphertext[aes.BlockSize:], pad)
+
+    if _, err := os.Stat(name); os.IsExist(err) {
+        os.Remove(name)
+    }
+
+    file, err := os.Create(name)
+    if err != nil {
+        return 0, STATUS_FS_ENC_COMP
+    }
+    defer file.Close()
+
+    written, err := file.Write(ciphertext)
+    if err != nil {
+        return uint(written), STATUS_FS_ENC_COMP
+    }
+
+    return uint(written), STATUS_OK
 }
 
 func (f *gofs_header) get_file_count() uint {
