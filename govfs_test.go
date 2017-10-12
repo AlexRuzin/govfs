@@ -191,14 +191,6 @@ func TestIOSanity(t *testing.T) {
     }
     out("[+] Test 15 PASS")
 
-     /*
-      * Unmount/commit database to file
-      */
-    if header.unmount_db() != 0 {
-        drive_fail("TEST16: Failed to commit database", t)
-    }
-    out("[+] Test 16 PASS")
-
     /*
      * Print out files
      */
@@ -206,8 +198,23 @@ func TestIOSanity(t *testing.T) {
     for _, e := range file_list {
         out(e)
     }
-    
+
+    /*
+     * Unmount/commit database to file
+     */
+    if header.unmount_db() != 0 {
+        drive_fail("TEST16: Failed to commit database", t)
+    }
+    out("[+] Test 16 PASS")
+
     time.Sleep(10000)
+}
+
+func TestFSReader(t *testing.T) {
+    /*
+     * Read in FS_DATABASE_FILE and do basic tests
+     */
+
 }
 
 func drive_fail(output string, t *testing.T) {

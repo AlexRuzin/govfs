@@ -64,6 +64,7 @@ const STATUS_NOT_READABLE       int = -4
 const STATUS_NAME_EXCEEDED      int = -5 /* Input name is too long for create() */
 const STATUS_FS_WRITE           int = -6 /* Failure in serializing and writing the filesystem */
 const STATUS_FS_ENC_COMP        int = -7 /* Compression/encryption failure FIXME -- separate these two */
+const STATUS_FS_DB_READ         int = -8
 
 const IRP_PURGE                 int = 2 /* Flush the entire database and all files */
 const IRP_DELETE                int = 3 /* Delete a file/folder */
@@ -102,11 +103,11 @@ type gofs_io_block struct {
 }
 
 func create_db(filename string) *gofs_header {
-    var header                      = new(gofs_header)
-    header.filename                 = filename
-    header.meta                     = make(map[string]*gofs_file)
-    header.meta[s("/")]             = new(gofs_file)
-    header.meta[s("/")].filename    = "/"
+    var header *gofs_header = new(gofs_header)
+    header.filename = filename
+    header.meta = make(map[string]*gofs_file)
+    header.meta[s("/")] = new(gofs_file)
+    header.meta[s("/")].filename = "/"
 
     /* i/o channel processor. Performs i/o to the filesystem */
     header.io_in = make(chan *gofs_io_block)
@@ -464,6 +465,14 @@ func (f *gofs_header) unmount_db() int {
     }
 
     return STATUS_OK
+}
+
+func (f *gofs_header) read_fs_stream(name string, flags int) ([]byte, int) {
+    if flags != FLAG_COMPRESS | FLAG_ENCRYPT {
+        return nil, STATUS_FS_DB_READ
+    }
+
+    return nil, STATUS_OK
 }
 
 func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int) (uint, int) {
