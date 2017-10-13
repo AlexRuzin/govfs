@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
  
-package gofs
+package govfs
 
 import (
     "testing"

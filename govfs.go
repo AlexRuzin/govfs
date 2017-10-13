@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-package gofs
+package govfs
 
 // TODO
 // create() can either create a folder or a file. 
