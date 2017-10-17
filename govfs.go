@@ -48,6 +48,7 @@ import (
     "crypto/cipher"
     "crypto/rand"
     "io"
+    "errors"
 )
 
 /*
@@ -55,16 +56,6 @@ import (
  */
 const MAX_FILENAME_LENGTH       int = 256
 const FS_SIGNATURE              string = "govfs_header" /* Cannot exceed 64 */
-
-const STATUS_OK                 int = 0
-const STATUS_ERROR              int = -1
-const STATUS_EXISTS             int = -2
-const STATUS_NOT_FOUND          int = -3
-const STATUS_NOT_READABLE       int = -4
-const STATUS_NAME_EXCEEDED      int = -5 /* Input name is too long for create() */
-const STATUS_FS_WRITE           int = -6 /* Failure in serializing and writing the filesystem */
-const STATUS_FS_ENC_COMP        int = -7 /* Compression/encryption failure FIXME -- separate these two */
-const STATUS_FS_DB_READ         int = -8
 
 const IRP_PURGE                 int = 2 /* Flush the entire database and all files */
 const IRP_DELETE                int = 3 /* Delete a file/folder */
@@ -97,7 +88,8 @@ type gofs_io_block struct {
     file        *gofs_file
     name        string
     data        []byte
-    status      int /* 0 == fail, 1 == ok, 2 == purge, 3 == delete, 4 == write */
+    status      error
+    operation   int /* 2 == purge, 3 == delete, 4 == write */
     flags       int
     io_out      chan *gofs_io_block
 }
@@ -125,7 +117,7 @@ func create_db(filename string) *gofs_header {
         for {
             var io = <- header.io_in
             
-            switch io.status {
+            switch io.operation {
             case IRP_PURGE:
                 /* PURGE */
                 out("ERROR: PURGING")
@@ -134,15 +126,15 @@ func create_db(filename string) *gofs_header {
             case IRP_DELETE:
                 /* DELETE */
                 // FIXME/ADDME
-                io.status = STATUS_ERROR
+                io.status = errors.New("IRP_DELETE generic error")
                 if io.file.filename == "/" { /* Cannot delete the root file */
-                    io.status = STATUS_ERROR
+                    io.status = errors.New("IRP_DELETE: Tried to delete the root file")
                     io.io_out <- io
                 } else {
                     if i := f.check(io.name); i != nil {
                         delete(f.meta, s(io.name))
                         f.meta[s(io.name)] = nil
-                        io.status = STATUS_OK
+                        io.status = nil
                     }
                     io.io_out <- io
                 }
@@ -151,11 +143,11 @@ func create_db(filename string) *gofs_header {
                 if i := f.check(io.name); i != nil {
                     io.file.lock.Lock()
                     if f.write_internal(i, io.data) == len(io.data) {
-                        io.status = STATUS_OK
+                        io.status = nil
                         io.file.lock.Unlock()
                         io.io_out <- io
                     } else {
-                        io.status = STATUS_ERROR
+                        io.status = errors.New("IRP_WRITE: Failed to write to filesystem")
                         io.file.lock.Unlock()
                         io.io_out <- io
                     }
@@ -192,7 +184,7 @@ func create_db(filename string) *gofs_header {
                     } (tmp, f)
                 }
 
-                io.status = STATUS_OK
+                io.status = nil
                 io.io_out <- io
             }
         }
@@ -223,7 +215,7 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
         irp.name = name
         irp.io_out = make(chan *gofs_io_block)
 
-        irp.status = IRP_DELETE
+        irp.operation = IRP_DELETE
 
         return irp
     case IRP_WRITE:
@@ -240,7 +232,7 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
         irp.io_out = make(chan *gofs_io_block)
         copy(irp.data, data)
 
-        irp.status = IRP_WRITE /* write IRP request */
+        irp.operation = IRP_WRITE /* write IRP request */
 
         return irp
         
@@ -248,7 +240,7 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
         /* CREATE IRP */
         irp := new(gofs_io_block)
         irp.name = name
-        irp.status = IRP_CREATE
+        irp.operation = IRP_CREATE
         irp.io_out = make(chan *gofs_io_block)
         
         return irp
@@ -257,13 +249,13 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
     return nil
 }
 
-func (f *gofs_header) create(name string) (*gofs_file, int) {
+func (f *gofs_header) create(name string) (*gofs_file, error) {
     if file := f.check(name); file != nil {
-        return nil, STATUS_EXISTS
+        return nil, errors.New("create: File already exists")
     }
 
     if len(name) > MAX_FILENAME_LENGTH {
-        return nil, STATUS_NAME_EXCEEDED
+        return nil, errors.New("create: File name is too long")
     }
 
     f.create_sync.Lock()
@@ -273,53 +265,49 @@ func (f *gofs_header) create(name string) (*gofs_file, int) {
     output_irp := <- irp.io_out
     f.create_sync.Unlock()
     if output_irp.file == nil {
-        return nil, STATUS_ERROR
+        return nil, output_irp.status
     }
     close(output_irp.io_out)
 
-    return output_irp.file, STATUS_OK
+    return output_irp.file, nil
 }
 
-func (f *gofs_header) read(name string) ([]byte, int) {
+func (f *gofs_header) read(name string) ([]byte, error) {
     var file_header = f.check(name)
     if file_header == nil {
-        return nil, STATUS_NOT_FOUND
+        return nil, errors.New("read: File does not exist")
     }
 
     if file_header.filetype == FLAG_DIRECTORY {
-        return nil, STATUS_NOT_READABLE
+        return nil, errors.New("read: Cannot read a directory")
     }
 
     output := make([]byte, len(file_header.data))
     copy(output, file_header.data)
-    return output, STATUS_OK
+    return output, nil
 }
 
-func (f *gofs_header) delete(name string) int {
+func (f *gofs_header) delete(name string) error {
     irp := f.generate_irp(name, nil, IRP_DELETE)
     if irp == nil {
-        return STATUS_ERROR /* ERROR -- File does not exist */
+        return errors.New("delete: File does not exist") /* ERROR -- File does not exist */
     }
 
     f.io_in <- irp
     var output_irp = <- irp.io_out
+    defer close(irp.io_out)
 
-    close(irp.io_out)
-    if output_irp.status != STATUS_OK {
-        return STATUS_ERROR /* failed */
-    }
-
-    return STATUS_OK
+    return output_irp.status
 }
 
-func (f *gofs_header) write(name string, d []byte) int {
+func (f *gofs_header) write(name string, d []byte) error {
     if i := f.check(name); i == nil {
-        return STATUS_ERROR
+        return errors.New("write: Cannot write to nonexistant file")
     }
     
     irp := f.generate_irp(name, d, IRP_WRITE)
     if irp == nil {
-        return STATUS_ERROR /* FAILURE */
+        return errors.New("write: Failed to generate IRP_WRITE") /* FAILURE */
     }
 
     /*
@@ -328,13 +316,9 @@ func (f *gofs_header) write(name string, d []byte) int {
      */
     f.io_in <- irp
     var output_irp = <- irp.io_out
+    defer close(irp.io_out)
 
-    close(irp.io_out)
-    if output_irp.status != STATUS_OK {
-        return STATUS_ERROR /* failed */
-    }
-
-    return STATUS_OK
+    return output_irp.status
 }
 
 func (f *gofs_header) write_internal(d *gofs_file, data []byte) int {
@@ -357,7 +341,7 @@ func (f *gofs_header) write_internal(d *gofs_file, data []byte) int {
     return datalen
 }
 
-func (f *gofs_header) unmount_db() int {
+func (f *gofs_header) unmount_db() error {
     type RawFile /* Capitalize for the sake of exporting */ struct {
         RawSum [16]byte
         GZIPSize uint
@@ -470,29 +454,26 @@ func (f *gofs_header) unmount_db() int {
     close(commit_ch)
 
     /* Compress, encrypt, and write stream */
-    if _, l := f.write_fs_stream(f.filename, stream, FLAG_COMPRESS | FLAG_ENCRYPT); l != STATUS_OK {
-        return STATUS_FS_WRITE
-    }
+    _, err := f.write_fs_stream(f.filename, stream, FLAG_COMPRESS | FLAG_ENCRYPT)
 
-    return STATUS_OK
+    return err
 }
 
-func load_header(data []byte) (*gofs_header, int) {
+func load_header(data []byte) (*gofs_header, error) {
     out(string(data))
-    return nil, STATUS_OK
+    return nil, errors.New("Unknown error")
 }
 
-func read_fs_stream(name string, flags int) ([]byte, int) {
+func read_fs_stream(name string, flags int) ([]byte, error) {
     if flags != FLAG_COMPRESS | FLAG_ENCRYPT {
-        return nil, STATUS_FS_DB_READ
+        return nil, errors.New("read_fs_stream: Operation not implemented")
     }
-
-    return nil, STATUS_OK
+    return nil, nil
 }
 
-func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int) (uint, int) {
+func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int) (uint, error) {
     if flags != FLAG_ENCRYPT | FLAG_COMPRESS {
-        return 0, STATUS_FS_ENC_COMP // FIXME
+        return 0, errors.New("read_fs_stream: Operation not implemented") // FIXME
     }
 
     var compressed *bytes.Buffer = new(bytes.Buffer)
@@ -517,13 +498,13 @@ func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int
 
     block, err := aes.NewCipher(key)
     if err != nil {
-        return 0, STATUS_FS_ENC_COMP
+        return 0, errors.New("write_fs_stream: Failed to generate cipher")
     }
 
     ciphertext := make([]byte, aes.BlockSize + len(pad))
     iv := ciphertext[:aes.BlockSize]
     if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-        return 0, STATUS_FS_ENC_COMP
+        return 0, errors.New("write_fs_stream: Failed to generate cipher")
     }
 
     mode := cipher.NewCBCEncrypter(block, iv)
@@ -535,16 +516,16 @@ func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int
 
     file, err := os.Create(name)
     if err != nil {
-        return 0, STATUS_FS_ENC_COMP
+        return 0, errors.New("write_fs_stream: Failed to create database file")
     }
     defer file.Close()
 
     written, err := file.Write(ciphertext)
     if err != nil {
-        return uint(written), STATUS_FS_ENC_COMP
+        return uint(written), errors.New("write_fs_stream: Failed to write database file")
     }
 
-    return uint(written), STATUS_OK
+    return uint(written), nil
 }
 
 func (f *gofs_header) get_file_count() uint {
@@ -556,13 +537,13 @@ func (f *gofs_header) get_file_count() uint {
     return total
 }
 
-func (f *gofs_header) get_file_size(name string) (uint, int) {
+func (f *gofs_header) get_file_size(name string) (uint, error) {
     file := f.check(name)
     if file == nil {
-        return 0, STATUS_NOT_FOUND
+        return 0, errors.New("get_file_size: File does not exist")
     }
 
-    return uint(len(file.data)), STATUS_OK
+    return uint(len(file.data)), nil
 }
 
 func (f *gofs_header) get_total_filesizes() uint {
