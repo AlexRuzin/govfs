@@ -44,11 +44,8 @@ import (
     "bytes"
     "sync"
     "strings"
-    "crypto/aes"
-    "crypto/cipher"
-    "crypto/rand"
-    "io"
     "errors"
+    "github.com/AlexRuzin/crypto"
 )
 
 /*
@@ -492,23 +489,11 @@ func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int
         return output
     } ()
 
-    /* Generate a pad of a 16byte blocksize */
-    pad := make([]byte, compressed.Len() + (aes.BlockSize - compressed.Len() % aes.BlockSize))
-    copy(pad, compressed.Bytes())
-
-    block, err := aes.NewCipher(key)
+    /* Perform RC4 encryption */
+    ciphertext, err := crypto.RC4_Encrypt(data.Bytes(), &key)
     if err != nil {
-        return 0, errors.New("write_fs_stream: Failed to generate cipher")
+        return 0, errors.New("error: Failure in invoking RC4 cipher on raw rs table")
     }
-
-    ciphertext := make([]byte, aes.BlockSize + len(pad))
-    iv := ciphertext[:aes.BlockSize]
-    if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-        return 0, errors.New("write_fs_stream: Failed to generate cipher")
-    }
-
-    mode := cipher.NewCBCEncrypter(block, iv)
-    mode.CryptBlocks(ciphertext[aes.BlockSize:], pad)
 
     if _, err := os.Stat(name); os.IsExist(err) {
         os.Remove(name)
