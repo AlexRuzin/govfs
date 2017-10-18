@@ -37,7 +37,10 @@ func TestIOSanity(t *testing.T) {
     if _, err := os.Stat(FS_DATABASE_FILE); os.IsExist(err) {
         os.Remove(FS_DATABASE_FILE)
     }
-    var header = create_db(FS_DATABASE_FILE)
+
+    var raw_fs_file *string
+    *raw_fs_file = FS_DATABASE_FILE
+    var header = create_db(raw_fs_file)
     if header == nil {
         drive_fail("TEST1: Failed to obtain header", t)
     }

@@ -46,6 +46,8 @@ import (
     "strings"
     "errors"
     "github.com/AlexRuzin/crypto"
+    "io"
+    "io/ioutil"
 )
 
 /*
@@ -91,18 +93,26 @@ type gofs_io_block struct {
     io_out      chan *gofs_io_block
 }
 
-func create_db(filename string) *gofs_header {
+/*
+ * Creates or loads a filesystem database file. If the filename is nil, then create a new database
+ *  otherwise try to load an existing fs database file.
+ */
+func create_db(filename *string) *gofs_header {
     var header *gofs_header
 
-    _, err := os.Stat(filename)
-    if os.IsExist(err) {
-        raw, _ := read_fs_stream(filename, FLAG_ENCRYPT|FLAG_COMPRESS)
-        header, _ = load_header(raw)
+    if filename != nil {
+        /* Check if the file exists */
+        _, err := os.Stat(*filename)
+        if os.IsExist(err) {
+            raw, _ := read_fs_stream(*filename, FLAG_ENCRYPT|FLAG_COMPRESS)
+            header, _ = load_header(raw)
+        }
     }
 
-    if os.IsNotExist(err) {
+    if header == nil {
+        /* Either the raw fs does not exist, or it is invalid -- create new */
         header = new(gofs_header)
-        header.filename = filename
+        header.filename = *filename
         header.meta = make(map[string]*gofs_file)
         header.meta[s("/")] = new(gofs_file)
         header.meta[s("/")].filename = "/"
@@ -461,13 +471,68 @@ func load_header(data []byte) (*gofs_header, error) {
     return nil, errors.New("Unknown error")
 }
 
+/*
+ * Generate the key used to encrypt/decrypt the raw fs table. The key is composed of the
+ *  MD5 sum of the hostname + the FS_SIGNATURE string
+ */
+func get_fs_key() []byte {
+    host, _ := os.Hostname()
+    host += FS_SIGNATURE
+
+    sum := md5.Sum([]byte(host))
+    output := make([]byte, len(sum))
+    copy(output, sum[:])
+    return output
+}
+
+/*
+ * Decrypts the raw fs stream from a filename, decompresses it, and returns a vector composed of the
+ *  serialized fs table. Since no gofs_header exists yet, this method will not be apart of that
+ *  structure, as per design choice
+ */
 func read_fs_stream(name string, flags int) ([]byte, error) {
     if flags != FLAG_COMPRESS | FLAG_ENCRYPT {
         return nil, errors.New("read_fs_stream: Operation not implemented")
     }
-    return nil, nil
+
+    if _, err := os.Stat(name); os.IsNotExist(err) {
+        return nil, errors.New("error: Cannot read from fs stream. File does not exist")
+    }
+
+    file, err := os.Create(name)
+    if err != nil {
+        return nil, errors.New("error: Cannot read from fs stream.")
+    }
+    defer file.Close()
+
+    raw_file := bytes.NewBuffer(nil)
+    io.Copy(raw_file, file)
+
+    /* The crypto key is composed of the MD5 of the hostname + the FS_SIGNATURE */
+    key := get_fs_key()
+
+    plaintext, err := crypto.RC4_Decrypt(raw_file.Bytes(), &key)
+    if err != nil {
+        return nil, errors.New("error: Failed to decrypt raw fs stream")
+    }
+
+    var b bytes.Buffer
+    b.Read(plaintext)
+
+    reader, err := gzip.NewReader(&b)
+    defer reader.Close()
+
+    decompressed, err := ioutil.ReadAll(reader)
+    if err != nil {
+        return nil, errors.New("error: Failed to decompress fs stream")
+    }
+
+    return decompressed, nil
 }
 
+/*
+ * Takes in the serialized fs table, compresses it, encrypts it and writes it to the disk
+ */
 func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int) (uint, error) {
     if flags != FLAG_ENCRYPT | FLAG_COMPRESS {
         return 0, errors.New("read_fs_stream: Operation not implemented") // FIXME
@@ -478,16 +543,8 @@ func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int
     w.Write(data.Bytes())
     w.Close()
 
-    /* The AES key will be the MD5 of the hostname string + the FS_SIGNATURE string */
-    key := func () []byte {
-        host, _ := os.Hostname()
-        host += FS_SIGNATURE
-
-        sum := md5.Sum([]byte(host))
-        output := make([]byte, len(sum))
-        copy(output, sum[:])
-        return output
-    } ()
+    /* The crypto key will be the MD5 of the hostname string + the FS_SIGNATURE string */
+    key := get_fs_key()
 
     /* Perform RC4 encryption */
     ciphertext, err := crypto.RC4_Encrypt(data.Bytes(), &key)
