@@ -116,7 +116,7 @@ func create_db(filename *string) *gofs_header {
         header.meta = make(map[string]*gofs_file)
         header.meta[s("/")] = new(gofs_file)
         header.meta[s("/")].filename = "/"
-    }
+    } /* test change */
 
     /* i/o channel processor. Performs i/o to the filesystem */
     header.io_in = make(chan *gofs_io_block)
