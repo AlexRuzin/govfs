@@ -46,7 +46,7 @@ import (
     "strings"
     "errors"
     "github.com/AlexRuzin/crypto"
-    "io"
+    _"io"
     "io/ioutil"
 )
 
@@ -102,7 +102,7 @@ func create_db(filename string) *gofs_header {
 
     if filename != "" {
         /* Check if the file exists */
-        if _, err := os.Stat(filename); os.IsExist(err) {
+        if _, err := os.Stat(filename); !os.IsNotExist(err) {
             raw, _ := read_fs_stream(filename, FLAG_ENCRYPT | FLAG_COMPRESS)
             header, _ = load_header(raw)
         }
@@ -501,19 +501,16 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
         return nil, errors.New("error: Cannot read from fs stream. File does not exist")
     }
 
-    file, err := os.Create(name)
+    var raw_file []byte
+    raw_file, err := ioutil.ReadFile(name)
     if err != nil {
-        return nil, errors.New("error: Cannot read from fs stream.")
+        return nil, errors.New("error: Failed to read file into memory")
     }
-    defer file.Close()
-
-    raw_file := bytes.NewBuffer(nil)
-    io.Copy(raw_file, file)
 
     /* The crypto key is composed of the MD5 of the hostname + the FS_SIGNATURE */
     key := get_fs_key()
 
-    plaintext, err := crypto.RC4_Decrypt(raw_file.Bytes(), &key)
+    plaintext, err := crypto.RC4_Decrypt(raw_file, &key)
     if err != nil {
         return nil, errors.New("error: Failed to decrypt raw fs stream")
     }
