@@ -48,6 +48,7 @@ import (
     "github.com/AlexRuzin/crypto"
     _"io"
     "io/ioutil"
+    _"github.com/AlexRuzin/util"
 )
 
 /*
@@ -497,6 +498,7 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
         return nil, errors.New("read_fs_stream: Operation not implemented")
     }
 
+    /* Read raw file */
     if _, err := os.Stat(name); os.IsNotExist(err) {
         return nil, errors.New("error: Cannot read from fs stream. File does not exist")
     }
@@ -507,6 +509,7 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
         return nil, errors.New("error: Failed to read file into memory")
     }
 
+    /* Decryption */
     /* The crypto key is composed of the MD5 of the hostname + the FS_SIGNATURE */
     key := get_fs_key()
 
@@ -515,15 +518,17 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
         return nil, errors.New("error: Failed to decrypt raw fs stream")
     }
 
-    var b bytes.Buffer
-    b.Read(plaintext)
-
-    reader, err := gzip.NewReader(&b)
-    defer reader.Close()
-
-    decompressed, err := ioutil.ReadAll(reader)
+    /* Decompression */
+    r := bytes.NewReader(plaintext)
+    fz, err := gzip.NewReader(r)
     if err != nil {
-        return nil, errors.New("error: Failed to decompress fs stream")
+        return nil, errors.New("error: Failed to decompress raw stream")
+    }
+    defer fz.Close()
+
+    decompressed, err := ioutil.ReadAll(fz)
+    if err != nil {
+        return nil, errors.New("error: Failure to read decompressed stream")
     }
 
     return decompressed, nil
