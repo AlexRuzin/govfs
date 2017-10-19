@@ -38,9 +38,9 @@ func TestIOSanity(t *testing.T) {
         os.Remove(FS_DATABASE_FILE)
     }
 
-    var raw_fs_file *string
-    *raw_fs_file = FS_DATABASE_FILE
-    var header = create_db(raw_fs_file)
+    var raw_fs_file string
+    raw_fs_file = FS_DATABASE_FILE
+    var header = create_db(&raw_fs_file)
     if header == nil {
         drive_fail("TEST1: Failed to obtain header", t)
     }
@@ -98,7 +98,7 @@ func TestIOSanity(t *testing.T) {
      * Write some data into file0
      */
     data = []byte{ 1, 2, 3, 4 }
-    if header.write("/folder0/folder0/file0", data) == nil {
+    if header.write("/folder0/folder0/file0", data) != nil {
         drive_fail("TEST6: Failed to write data in file0", t)
     }
     out("[+] Test 6 PASS")
@@ -123,7 +123,7 @@ func TestIOSanity(t *testing.T) {
      * Write some data into file3
      */
     var data2 = []byte{ 1, 2, 3, 4, 5, 6, 7 }
-    if header.write("/folder1/folder0/file3", data2) == nil {
+    if header.write("/folder1/folder0/file3", data2) != nil {
         drive_fail("TEST8: Failed to write data in file3", t)
     }
     out("[+] Test 8 PASS")
@@ -131,7 +131,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Write some data into file3
      */
-    if header.write("/folder1/folder0/file3", data2) == nil{
+    if header.write("/folder1/folder0/file3", data2) != nil {
         drive_fail("TEST8.1: Failed to write data in file3", t)
     }
     out("[+] Test 8.1 PASS")
@@ -158,7 +158,7 @@ func TestIOSanity(t *testing.T) {
      * Write other data to file0
      */
     data = []byte{ 1, 2, 3 }
-    if header.write("/folder0/folder0/file0", data) == nil {
+    if header.write("/folder0/folder0/file0", data) != nil {
         drive_fail("TEST11: Failed to write data in file1", t)
     }   
     out("[+] Test 11 PASS")
