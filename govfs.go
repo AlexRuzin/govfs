@@ -97,14 +97,13 @@ type gofs_io_block struct {
  * Creates or loads a filesystem database file. If the filename is nil, then create a new database
  *  otherwise try to load an existing fs database file.
  */
-func create_db(filename *string) *gofs_header {
+func create_db(filename string) *gofs_header {
     var header *gofs_header
 
-    if filename != nil {
+    if filename != "" {
         /* Check if the file exists */
-        _, err := os.Stat(*filename)
-        if os.IsExist(err) {
-            raw, _ := read_fs_stream(*filename, FLAG_ENCRYPT|FLAG_COMPRESS)
+        if _, err := os.Stat(filename); os.IsExist(err) {
+            raw, _ := read_fs_stream(filename, FLAG_ENCRYPT | FLAG_COMPRESS)
             header, _ = load_header(raw)
         }
     }
@@ -112,7 +111,7 @@ func create_db(filename *string) *gofs_header {
     if header == nil {
         /* Either the raw fs does not exist, or it is invalid -- create new */
         header = new(gofs_header)
-        header.filename = *filename
+        header.filename = filename
         header.meta = make(map[string]*gofs_file)
         header.meta[s("/")] = new(gofs_file)
         header.meta[s("/")].filename = "/"
@@ -461,7 +460,10 @@ func (f *gofs_header) unmount_db() error {
     close(commit_ch)
 
     /* Compress, encrypt, and write stream */
-    _, err := f.write_fs_stream(f.filename, stream, FLAG_COMPRESS | FLAG_ENCRYPT)
+    written, err := f.write_fs_stream(f.filename, stream, FLAG_COMPRESS | FLAG_ENCRYPT)
+    if err != nil || int(written) == 0 {
+        return errors.New("error: Failure in writing raw fs stream")
+    }
 
     return err
 }

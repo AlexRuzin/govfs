@@ -31,16 +31,19 @@ import (
 const FS_DATABASE_FILE string = "test_db"
 
 func TestIOSanity(t *testing.T) {
+    /*
+     * This test will generate the raw fs stream file, along with some contents
+     *  that will be later loaded by the TestFSReader() method
+     */
     out("[+] Running Standard I/O Sanity Test...")
 
     /* Remove the test database if it exists */
-    if _, err := os.Stat(FS_DATABASE_FILE); os.IsExist(err) {
-        os.Remove(FS_DATABASE_FILE)
+    var filename = gen_raw_filename(FS_DATABASE_FILE)
+    if _, err := os.Stat(filename); os.IsExist(err) {
+        os.Remove(filename)
     }
 
-    var raw_fs_file string
-    raw_fs_file = FS_DATABASE_FILE
-    var header = create_db(&raw_fs_file)
+    var header = create_db(filename)
     if header == nil {
         drive_fail("TEST1: Failed to obtain header", t)
     }
@@ -204,10 +207,10 @@ func TestIOSanity(t *testing.T) {
     /*
      * Unmount/commit database to file
      */
-    if header.unmount_db() == nil {
+    if header.unmount_db() != nil {
         drive_fail("TEST16: Failed to commit database", t)
     }
-    out("[+] Test 16 PASS")
+    out("[+] Test 16 PASS. Raw FS stream written to: " + header.filename)
 
     time.Sleep(10000)
 }
@@ -216,7 +219,23 @@ func TestFSReader(t *testing.T) {
     /*
      * Read in FS_DATABASE_FILE and do basic tests
      */
+    var filename = gen_raw_filename(FS_DATABASE_FILE)
+    out("[+] Loading Raw FS stream file: " + filename)
 
+    /* Remove the test database if it exists */
+    if _, err := os.Stat(filename); os.IsNotExist(err) {
+        drive_fail("error: Standard raw fs stream " + filename + " does not exist", t)
+    }
+
+    var header = create_db(filename)
+    if header == nil {
+        drive_fail("TEST1: Failed to obtain header", t)
+    }
+    out("[+] Test 1 PASS (Loaded FS stream)")
+}
+
+func gen_raw_filename(suffix string) string {
+    return os.Getenv("TEMP") + "\\" + suffix + ".db"
 }
 
 func drive_fail(output string, t *testing.T) {
