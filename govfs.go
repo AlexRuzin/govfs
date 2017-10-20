@@ -680,10 +680,5 @@ func s(name string) string {
     return hex.EncodeToString(sum[:])
 }
 
-func out(debug string) {
-    fmt.Println(debug)
-}
+/* EOF */
 
-func out_hex(debug []byte) {
-    fmt.Printf("%v\r\n", debug)
-}
