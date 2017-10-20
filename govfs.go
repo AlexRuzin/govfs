@@ -36,7 +36,6 @@ package govfs
 
 import (
     "os"
-    "fmt"
     "crypto/md5"
     "encoding/hex"
     "encoding/gob"

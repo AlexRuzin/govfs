@@ -1,5 +1,9 @@
 package govfs
 
+import (
+    "fmt"
+)
+
 func out(debug string) {
     fmt.Println(debug)
 }
