@@ -43,7 +43,7 @@ func TestIOSanity(t *testing.T) {
         os.Remove(filename)
     }
 
-    var header = create_db(filename, 0)
+    var header = CreateDatabase(filename, 0)
     if header == nil {
         drive_fail("TEST1: Failed to obtain header", t)
     }
@@ -227,7 +227,7 @@ func TestFSReader(t *testing.T) {
         drive_fail("error: Standard raw fs stream " + filename + " does not exist", t)
     }
 
-    var header = create_db(filename, 0)
+    var header = CreateDatabase(filename, 0)
     if header == nil {
         drive_fail("TEST1: Failed to obtain header", t)
     }

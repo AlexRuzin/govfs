@@ -99,7 +99,7 @@ type gofs_io_block struct {
  *
  * Flags: FLAG_ENCRYPT, FLAG_COMPRESS
  */
-func create_db(name string, flags int) *FSHeader {
+func CreateDatabase(name string, flags int) *FSHeader {
     var header *FSHeader
 
     if name != "" {
