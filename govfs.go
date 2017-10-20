@@ -99,22 +99,25 @@ type gofs_io_block struct {
  *
  * Flags: FLAG_ENCRYPT, FLAG_COMPRESS
  */
-func create_db(filename string, flags int) *gofs_header {
+func create_db(name string, flags int) *gofs_header {
     var header *gofs_header
 
-    if filename != "" {
+    if name != "" {
         /* Check if the file exists */
-        if _, err := os.Stat(filename); os.IsExist(err) {
-            raw, _ := read_fs_stream(filename, flags)
+        if _, err := os.Stat(name); os.IsExist(err) {
+            raw, _ := read_fs_stream(name, flags)
             header, _ = load_header(raw)
         }
     }
 
     if header == nil {
         /* Either the raw fs does not exist, or it is invalid -- create new */
-        header = new(gofs_header)
-        header.filename = filename
-        header.meta = make(map[string]*gofs_file)
+        header = &gofs_header{
+            filename: name,
+            meta: make(map[string]*gofs_file),
+        }
+
+        /* Generate the standard "/" file */
         header.meta[s("/")] = new(gofs_file)
         header.meta[s("/")].filename = "/"
     } /* test change */
@@ -218,12 +221,13 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
             return nil /* ERROR -- deleting non-existant file */
         }
 
-        irp := new(gofs_io_block)
-        irp.file = file_header
-        irp.name = name
-        irp.io_out = make(chan *gofs_io_block)
+        irp := &gofs_io_block {
+            file: file_header,
+            name: name,
+            io_out: make(chan *gofs_io_block),
 
-        irp.operation = IRP_DELETE
+            operation: IRP_DELETE,
+        }
 
         return irp
     case IRP_WRITE:
@@ -233,23 +237,25 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
             return nil
         }
 
-        irp := new(gofs_io_block)
-        irp.file = file_header
-        irp.name = name
-        irp.data = make([]byte, len(data))
-        irp.io_out = make(chan *gofs_io_block)
-        copy(irp.data, data)
+        irp := &gofs_io_block{
+            file: file_header,
+            name: name,
+            data: make([]byte, len(data)),
+            io_out: make(chan *gofs_io_block),
 
-        irp.operation = IRP_WRITE /* write IRP request */
+            operation: IRP_WRITE, /* write IRP request */
+        }
+        copy(irp.data, data)
 
         return irp
         
     case IRP_CREATE:
         /* CREATE IRP */
-        irp := new(gofs_io_block)
-        irp.name = name
-        irp.operation = IRP_CREATE
-        irp.io_out = make(chan *gofs_io_block)
+        irp := &gofs_io_block{
+            name: name,
+            operation: IRP_CREATE,
+            io_out: make(chan *gofs_io_block),
+        }
         
         return irp
     }    
@@ -398,8 +404,7 @@ func (f *gofs_header) unmount_db() error {
 
     commit_ch := make(chan *comp_data)
     for k := range f.meta {
-        header := new(comp_data)
-        header.file = f.meta[k]
+        header := &comp_data{ file: f.meta[k] }
 
         go func (d *comp_data) {
             if d.file.filename == "/" {
