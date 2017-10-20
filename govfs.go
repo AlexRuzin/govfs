@@ -96,14 +96,16 @@ type gofs_io_block struct {
 /*
  * Creates or loads a filesystem database file. If the filename is nil, then create a new database
  *  otherwise try to load an existing fs database file.
+ *
+ * Flags: FLAG_ENCRYPT, FLAG_COMPRESS
  */
-func create_db(filename string) *gofs_header {
+func create_db(filename string, flags int) *gofs_header {
     var header *gofs_header
 
     if filename != "" {
         /* Check if the file exists */
         if _, err := os.Stat(filename); os.IsExist(err) {
-            raw, _ := read_fs_stream(filename, FLAG_ENCRYPT | FLAG_COMPRESS)
+            raw, _ := read_fs_stream(filename, flags)
             header, _ = load_header(raw)
         }
     }
@@ -536,10 +538,6 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
  * Takes in the serialized fs table, compresses it, encrypts it and writes it to the disk
  */
 func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int) (uint, error) {
-    if flags != FLAG_ENCRYPT | FLAG_COMPRESS {
-        return 0, errors.New("read_fs_stream: Operation not implemented") // FIXME
-    }
-
     var compressed *bytes.Buffer = new(bytes.Buffer)
     w := gzip.NewWriter(compressed)
     w.Write(data.Bytes())
