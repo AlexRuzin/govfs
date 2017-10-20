@@ -547,7 +547,7 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
  */
 func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int) (uint, error) {
 
-    var compressed *bytes.Buffer = new(bytes.Buffer)
+    var compressed = new(bytes.Buffer)
 
     if (flags & FLAG_COMPRESS) == 1 {
         w := gzip.NewWriter(compressed)
