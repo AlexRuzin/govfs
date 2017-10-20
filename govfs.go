@@ -66,7 +66,7 @@ const FLAG_DIRECTORY            int = 2
 const FLAG_COMPRESS             int = 4 /* Compression on the fs serialized output */
 const FLAG_ENCRYPT              int = 8 /* Encryption on the fs serialized output */
 
-type gofs_header struct {
+type FSHeader struct {
     filename    string
     key         [16]byte
     meta        map[string]*gofs_file
@@ -99,8 +99,8 @@ type gofs_io_block struct {
  *
  * Flags: FLAG_ENCRYPT, FLAG_COMPRESS
  */
-func create_db(name string, flags int) *gofs_header {
-    var header *gofs_header
+func create_db(name string, flags int) *FSHeader {
+    var header *FSHeader
 
     if name != "" {
         /* Check if the file exists */
@@ -112,7 +112,7 @@ func create_db(name string, flags int) *gofs_header {
 
     if header == nil {
         /* Either the raw fs does not exist, or it is invalid -- create new */
-        header = &gofs_header{
+        header = &FSHeader{
             filename: name,
             meta: make(map[string]*gofs_file),
         }
@@ -124,7 +124,7 @@ func create_db(name string, flags int) *gofs_header {
 
     /* i/o channel processor. Performs i/o to the filesystem */
     header.io_in = make(chan *gofs_io_block)
-    go func (f *gofs_header) {
+    go func (f *FSHeader) {
         for {
             var io = <- header.io_in
             
@@ -183,7 +183,7 @@ func create_db(name string, flags int) *gofs_header {
                     tmp += "/" + sub_array[e]
 
                     /* Create a subdirectory header */
-                    func (sub_directory string, f *gofs_header) {
+                    func (sub_directory string, f *FSHeader) {
                         if f := f.check(sub_directory); f != nil {
                             return /* There can exist two files with the same name,
                                        as long as one is a directory and the other is a file */
@@ -204,7 +204,7 @@ func create_db(name string, flags int) *gofs_header {
     return header
 }
 
-func (f *gofs_header) check(name string) *gofs_file {
+func (f *FSHeader) check(name string) *gofs_file {
     if sum := s(name); f.meta[sum] != nil {
         return f.meta[sum]
     }
@@ -212,7 +212,7 @@ func (f *gofs_header) check(name string) *gofs_file {
     return nil
 }
 
-func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs_io_block {
+func (f *FSHeader) generate_irp(name string, data []byte, irp_type int) *gofs_io_block {
     switch irp_type {
     case IRP_DELETE:
         /* DELETE */
@@ -263,7 +263,7 @@ func (f *gofs_header) generate_irp(name string, data []byte, irp_type int) *gofs
     return nil
 }
 
-func (f *gofs_header) create(name string) (*gofs_file, error) {
+func (f *FSHeader) create(name string) (*gofs_file, error) {
     if file := f.check(name); file != nil {
         return nil, errors.New("create: File already exists")
     }
@@ -292,10 +292,10 @@ func (f *gofs_header) create(name string) (*gofs_file, error) {
 type Reader struct {
     Name string
     File *gofs_file
-    Hdr *gofs_header
+    Hdr *FSHeader
 }
 
-func (f *gofs_header) NewReader(name string) (*Reader, error) {
+func (f *FSHeader) NewReader(name string) (*Reader, error) {
     file := f.check(name)
     if file == nil {
         return nil, errors.New("error: File not found")
@@ -319,7 +319,7 @@ func (f *Reader) Read(p []byte) (int, error) {
     return 0, nil
 }
 
-func (f *gofs_header) read(name string) ([]byte, error) {
+func (f *FSHeader) read(name string) ([]byte, error) {
     var file_header = f.check(name)
     if file_header == nil {
         return nil, errors.New("read: File does not exist")
@@ -334,7 +334,7 @@ func (f *gofs_header) read(name string) ([]byte, error) {
     return output, nil
 }
 
-func (f *gofs_header) delete(name string) error {
+func (f *FSHeader) delete(name string) error {
     irp := f.generate_irp(name, nil, IRP_DELETE)
     if irp == nil {
         return errors.New("delete: File does not exist") /* ERROR -- File does not exist */
@@ -347,7 +347,7 @@ func (f *gofs_header) delete(name string) error {
     return output_irp.status
 }
 
-func (f *gofs_header) write(name string, d []byte) error {
+func (f *FSHeader) write(name string, d []byte) error {
     if i := f.check(name); i == nil {
         return errors.New("write: Cannot write to nonexistant file")
     }
@@ -368,7 +368,7 @@ func (f *gofs_header) write(name string, d []byte) error {
     return output_irp.status
 }
 
-func (f *gofs_header) write_internal(d *gofs_file, data []byte) int {
+func (f *FSHeader) write_internal(d *gofs_file, data []byte) int {
     if len(data) == 0 {
         return len(data)
     }
@@ -388,7 +388,7 @@ func (f *gofs_header) write_internal(d *gofs_file, data []byte) int {
     return datalen
 }
 
-func (f *gofs_header) unmount_db() error {
+func (f *FSHeader) unmount_db() error {
     type RawFile /* Capitalize for the sake of exporting */ struct {
         RawSum [16]byte
         GZIPSize uint
@@ -508,7 +508,7 @@ func (f *gofs_header) unmount_db() error {
     return err
 }
 
-func load_header(data []byte) (*gofs_header, error) {
+func load_header(data []byte) (*FSHeader, error) {
     out(string(data))
     return nil, errors.New("Unknown error")
 }
@@ -529,7 +529,7 @@ func get_fs_key() []byte {
 
 /*
  * Decrypts the raw fs stream from a filename, decompresses it, and returns a vector composed of the
- *  serialized fs table. Since no gofs_header exists yet, this method will not be apart of that
+ *  serialized fs table. Since no FSHeader exists yet, this method will not be apart of that
  *  structure, as per design choice
  */
 func read_fs_stream(name string, flags int) ([]byte, error) {
@@ -583,7 +583,7 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
 /*
  * Takes in the serialized fs table, compresses it, encrypts it and writes it to the disk
  */
-func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int) (uint, error) {
+func (f *FSHeader) write_fs_stream(name string, data *bytes.Buffer, flags int) (uint, error) {
 
     var compressed = new(bytes.Buffer)
 
@@ -629,7 +629,7 @@ func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int
     return uint(written), nil
 }
 
-func (f *gofs_header) get_file_count() uint {
+func (f *FSHeader) get_file_count() uint {
     var total uint = 0
     for range f.meta {
         total += 1
@@ -638,7 +638,7 @@ func (f *gofs_header) get_file_count() uint {
     return total
 }
 
-func (f *gofs_header) get_file_size(name string) (uint, error) {
+func (f *FSHeader) get_file_size(name string) (uint, error) {
     file := f.check(name)
     if file == nil {
         return 0, errors.New("get_file_size: File does not exist")
@@ -647,11 +647,11 @@ func (f *gofs_header) get_file_size(name string) (uint, error) {
     return uint(len(file.data)), nil
 }
 
-func (f *gofs_header) get_total_filesizes() uint {
+func (f *FSHeader) get_total_filesizes() uint {
     return f.t_size
 }
 
-func (f *gofs_header) get_file_list() []string {
+func (f *FSHeader) get_file_list() []string {
     var output []string
 
     for k := range f.meta {
