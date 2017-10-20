@@ -28,6 +28,7 @@ import (
     "os"
     "io"
     _"bytes"
+    "bytes"
 )
 
 const FS_DATABASE_FILE string = "test_db"
@@ -206,9 +207,9 @@ func TestIOSanity(t *testing.T) {
         drive_fail("TEST15.1: Failed to create Reader", t)
     }
 
-    var file0data []byte
+    file0data := make([]byte, reader.Len())
     data_read, err := reader.Read(file0data)
-    if data_read != len(data) || err != io.EOF {
+    if data_read != len(data) || err != io.EOF || bytes.Compare(file0data, data) != 0 {
         drive_fail("TEST15.2: Failed to read from NewReader", t)
     }
     out("[+] Test 15.1, 15.2 PASS")

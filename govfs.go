@@ -309,6 +309,10 @@ func (f *FSHeader) NewReader(name string) (*Reader, error) {
     return reader, nil
 }
 
+func (f *Reader) Len() (int) {
+    return len(f.File.data)
+}
+
 func (f *Reader) Read(r []byte) (int, error) {
     if f.Name == "" || f.File == nil || len(f.File.data) < 1  {
         return 0, nil
@@ -319,6 +323,7 @@ func (f *Reader) Read(r []byte) (int, error) {
         return 0, err
     }
 
+    copy(r, data)
 
     return len(data), io.EOF
 }
