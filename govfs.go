@@ -280,6 +280,39 @@ func (f *gofs_header) create(name string) (*gofs_file, error) {
     return output_irp.file, nil
 }
 
+/*
+ * The reader/ writer interfaces
+ */
+type Reader struct {
+    Name string
+    File *gofs_file
+    Hdr *gofs_header
+}
+
+func (f *gofs_header) NewReader(name string) (*Reader, error) {
+    file := f.check(name)
+    if file == nil {
+        return nil, errors.New("error: File not found")
+    }
+
+    reader := &Reader{
+        Name: name,
+        File: file,
+        Hdr: f,
+    }
+
+    return reader, nil
+}
+
+func (f *Reader) Read(p []byte) (int, error) {
+    if len(p) == 0 {
+        return 0, nil
+    }
+
+    //file_data, err := f.read(f.name)
+    return 0, nil
+}
+
 func (f *gofs_header) read(name string) ([]byte, error) {
     var file_header = f.check(name)
     if file_header == nil {
