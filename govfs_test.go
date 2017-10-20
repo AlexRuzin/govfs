@@ -26,6 +26,7 @@ import (
     "testing"
     "time"
     "os"
+    "io"
 )
 
 const FS_DATABASE_FILE string = "test_db"
@@ -50,7 +51,7 @@ func TestIOSanity(t *testing.T) {
     out("[+] Test 1 PASS")
     
     // The root file "/" must at least exist
-    if file, err := header.create("/"); file != nil && err == nil {
+    if file, err := header.Create("/"); file != nil && err == nil {
         drive_fail("TEST2: Failed to return root handle", t)
     }
     out("[+] Test 2 PASS")
@@ -58,7 +59,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Try to delete the root file "/"
      */
-    if header.delete("/") == nil {
+    if header.Delete("/") == nil {
         drive_fail("TEST3: Cannot delete root -- critical", t)
     }
     out("[+] Test 3 PASS")
@@ -67,7 +68,7 @@ func TestIOSanity(t *testing.T) {
      * Attempt to write to a nonexistant file
      */
     var data = []byte{ 1, 2 }
-    if header.write("/folder5/folder5/file5", data) == nil {
+    if header.Write("/folder5/folder5/file5", data) == nil {
         drive_fail("TEST4: Cannot write to a nonexistant file", t)
     }
     out("[+] Test 4 PASS")
@@ -75,7 +76,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Create empty file file9
      */
-    if file, err := header.create("/folder5/folder4/folder2/file9"); file == nil || err != nil {
+    if file, err := header.Create("/folder5/folder4/folder2/file9"); file == nil || err != nil {
         drive_fail("TEST4.1: file9 cannot be created", t)
     }
     out("[+] Test 4.1 PASS")
@@ -83,7 +84,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Attempt to create a new file0
      */
-    if file, err := header.create("/folder0/folder0/file0"); file == nil || err != nil {
+    if file, err := header.Create("/folder0/folder0/file0"); file == nil || err != nil {
         drive_fail("TEST5.0: file0 cannot be created", t)
     }
     out("[+] Test 5.0 PASS")
@@ -91,7 +92,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Attempt to create a new file0, this will fail since it should already exist
      */
-    if file, err := header.create("/folder0/folder0/file0"); file != nil && err == nil {
+    if file, err := header.Create("/folder0/folder0/file0"); file != nil && err == nil {
         drive_fail("TEST5.1: file0 cannot be created twice", t)
     }
     out("[+] Test 5.1 PASS")
@@ -101,7 +102,7 @@ func TestIOSanity(t *testing.T) {
      * Write some data into file0
      */
     data = []byte{ 1, 2, 3, 4 }
-    if header.write("/folder0/folder0/file0", data) != nil {
+    if header.Write("/folder0/folder0/file0", data) != nil {
         drive_fail("TEST6: Failed to write data in file0", t)
     }
     out("[+] Test 6 PASS")
@@ -117,7 +118,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Attempt to create a new file3
      */
-    if file, err := header.create("/folder1/folder0/file3"); file == nil || err != nil {
+    if file, err := header.Create("/folder1/folder0/file3"); file == nil || err != nil {
         drive_fail("TEST7: file3 cannot be created", t)
     }
     out("[+] Test 7 PASS")
@@ -126,7 +127,7 @@ func TestIOSanity(t *testing.T) {
      * Write some data into file3
      */
     var data2 = []byte{ 1, 2, 3, 4, 5, 6, 7 }
-    if header.write("/folder1/folder0/file3", data2) != nil {
+    if header.Write("/folder1/folder0/file3", data2) != nil {
         drive_fail("TEST8: Failed to write data in file3", t)
     }
     out("[+] Test 8 PASS")
@@ -134,7 +135,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Write some data into file3
      */
-    if header.write("/folder1/folder0/file3", data2) != nil {
+    if header.Write("/folder1/folder0/file3", data2) != nil {
         drive_fail("TEST8.1: Failed to write data in file3", t)
     }
     out("[+] Test 8.1 PASS")
@@ -142,7 +143,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Read the written data from file0 and compare
      */
-    output_data, _ := header.read("/folder0/folder0/file0")
+    output_data, _ := header.Read("/folder0/folder0/file0")
     if output_data == nil || len(output_data) != len(data) || header.t_size - 7 /* len(file3) */ != uint(len(data)) {
         drive_fail("TEST9: Failed to read data from file0", t)
     }
@@ -151,7 +152,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Read the written data from file3 and compare
      */
-    output_data, _ = header.read("/folder1/folder0/file3")
+    output_data, _ = header.Read("/folder1/folder0/file3")
     if output_data == nil || len(output_data) != len(data2) || header.t_size - 4 /* len(file0) */ != uint(len(data2)) {
         drive_fail("TEST10: Failed to read data from file3", t)
     }
@@ -161,7 +162,7 @@ func TestIOSanity(t *testing.T) {
      * Write other data to file0
      */
     data = []byte{ 1, 2, 3 }
-    if header.write("/folder0/folder0/file0", data) != nil {
+    if header.Write("/folder0/folder0/file0", data) != nil {
         drive_fail("TEST11: Failed to write data in file1", t)
     }   
     out("[+] Test 11 PASS")
@@ -169,7 +170,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Read the new data from file0
      */
-    output_data, _ = header.read("/folder0/folder0/file0")
+    output_data, _ = header.Read("/folder0/folder0/file0")
     if output_data == nil || len(output_data) != len(data) {
         drive_fail("TEST12: Failed to read data from file1", t)
     }
@@ -178,7 +179,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Attempt to create a new file5. This will be a blank file
      */
-    if file, err := header.create("/folder2/file7"); file == nil || err != nil {
+    if file, err := header.Create("/folder2/file7"); file == nil || err != nil {
         drive_fail("TEST13: file3 cannot be created", t)
     }
     out("[+] Test 13 PASS")
@@ -191,10 +192,24 @@ func TestIOSanity(t *testing.T) {
     /*
      * Create just a folder
      */
-    if file, err := header.create("/folder2/file5/"); file == nil || err != nil {
+    if file, err := header.Create("/folder2/file5/"); file == nil || err != nil {
         drive_fail("TEST15: folder file5 cannot be created", t)
     }
     out("[+] Test 15 PASS")
+
+    /*
+     * Tests the Reader interface
+     */
+    reader, err := header.NewReader("/folder0/folder0/file0")
+    if err != nil {
+        drive_fail("TEST15.1: Failed to create Reader", t)
+    }
+    var file0data []byte
+    data_read, err := reader.Read(file0data)
+    if data_read != len(data) || err != io.EOF {
+        drive_fail("TEST15.2: Failed to read from NewReader", t)
+    }
+    out("[+] Test 15.1, 15.2 PASS")
 
     /*
      * Print out files

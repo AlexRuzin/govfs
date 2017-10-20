@@ -1,16 +1,16 @@
 /*
  * Copyright (c) 2017 AlexRuzin (stan.ruzin@gmail.com)
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -23,7 +23,7 @@
 package govfs
 
 // TODO
-// create() can either create a folder or a file. 
+// create() can either create a folder or a file.
 // When a folder/file is created, make all subdirectories in the map as well
 
 /* TEST5
@@ -127,7 +127,7 @@ func CreateDatabase(name string, flags int) *FSHeader {
     go func (f *FSHeader) {
         for {
             var io = <- header.io_in
-            
+
             switch io.operation {
             case IRP_PURGE:
                 /* PURGE */
@@ -163,17 +163,17 @@ func CreateDatabase(name string, flags int) *FSHeader {
                         io.io_out <- io
                     }
                 }
-            case IRP_CREATE:          
+            case IRP_CREATE:
                 f.meta[s(io.name)] = new(gofs_file)
-                io.file = f.meta[s(io.name)]                
+                io.file = f.meta[s(io.name)]
                 io.file.filename = io.name
-                
+
                 if string(io.name[len(io.name) - 1:]) == "/" {
                     io.file.filetype = FLAG_DIRECTORY
                 } else {
                     io.file.filetype = FLAG_FILE
                 }
-                
+
                 /* Recursively create all subdirectory files */
                 sub_strings := strings.Split(io.name, "/")
                 sub_array := make([]string, len(sub_strings) - 2)
@@ -248,7 +248,7 @@ func (f *FSHeader) generate_irp(name string, data []byte, irp_type int) *gofs_io
         copy(irp.data, data)
 
         return irp
-        
+
     case IRP_CREATE:
         /* CREATE IRP */
         irp := &gofs_io_block{
@@ -256,14 +256,14 @@ func (f *FSHeader) generate_irp(name string, data []byte, irp_type int) *gofs_io
             operation: IRP_CREATE,
             io_out: make(chan *gofs_io_block),
         }
-        
+
         return irp
-    }    
-    
+    }
+
     return nil
 }
 
-func (f *FSHeader) create(name string) (*gofs_file, error) {
+func (f *FSHeader) Create(name string) (*gofs_file, error) {
     if file := f.check(name); file != nil {
         return nil, errors.New("create: File already exists")
     }
@@ -274,7 +274,7 @@ func (f *FSHeader) create(name string) (*gofs_file, error) {
 
     f.create_sync.Lock()
     var irp *gofs_io_block = f.generate_irp(name, nil, IRP_CREATE)
-    
+
     f.io_in <- irp
     output_irp := <- irp.io_out
     f.create_sync.Unlock()
@@ -287,7 +287,7 @@ func (f *FSHeader) create(name string) (*gofs_file, error) {
 }
 
 /*
- * The reader/ writer interfaces
+ * Reader interface
  */
 type Reader struct {
     Name string
@@ -311,15 +311,20 @@ func (f *FSHeader) NewReader(name string) (*Reader, error) {
 }
 
 func (f *Reader) Read(p []byte) (int, error) {
-    if len(p) == 0 {
+    if f.Name == "" || f.File == nil || len(f.File.data) < 1  {
         return 0, nil
     }
 
-    //file_data, err := f.read(f.name)
-    return 0, nil
+    data, err := f.Hdr.Read(f.Name)
+    if err != nil || len(data) == 0 {
+        return 0, err
+    }
+
+    copy(p, data)
+    return len(data), io.EOF
 }
 
-func (f *FSHeader) read(name string) ([]byte, error) {
+func (f *FSHeader) Read(name string) ([]byte, error) {
     var file_header = f.check(name)
     if file_header == nil {
         return nil, errors.New("read: File does not exist")
@@ -334,7 +339,7 @@ func (f *FSHeader) read(name string) ([]byte, error) {
     return output, nil
 }
 
-func (f *FSHeader) delete(name string) error {
+func (f *FSHeader) Delete(name string) error {
     irp := f.generate_irp(name, nil, IRP_DELETE)
     if irp == nil {
         return errors.New("delete: File does not exist") /* ERROR -- File does not exist */
@@ -347,11 +352,11 @@ func (f *FSHeader) delete(name string) error {
     return output_irp.status
 }
 
-func (f *FSHeader) write(name string, d []byte) error {
+func (f *FSHeader) Write(name string, d []byte) error {
     if i := f.check(name); i == nil {
-        return errors.New("write: Cannot write to nonexistant file")
+        return errors.New("write: Cannot write to nonexistent file")
     }
-    
+
     irp := f.generate_irp(name, d, IRP_WRITE)
     if irp == nil {
         return errors.New("write: Failed to generate IRP_WRITE") /* FAILURE */
