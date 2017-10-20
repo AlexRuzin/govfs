@@ -495,10 +495,6 @@ func get_fs_key() []byte {
  *  structure, as per design choice
  */
 func read_fs_stream(name string, flags int) ([]byte, error) {
-    if flags != FLAG_COMPRESS | FLAG_ENCRYPT {
-        return nil, errors.New("read_fs_stream: Operation not implemented")
-    }
-
     if _, err := os.Stat(name); os.IsNotExist(err) {
         return nil, errors.New("error: Cannot read from fs stream. File does not exist")
     }
@@ -512,23 +508,35 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
     raw_file := bytes.NewBuffer(nil)
     io.Copy(raw_file, file)
 
-    /* The crypto key is composed of the MD5 of the hostname + the FS_SIGNATURE */
-    key := get_fs_key()
+    var plaintext []byte
 
-    plaintext, err := crypto.RC4_Decrypt(raw_file.Bytes(), &key)
-    if err != nil {
-        return nil, errors.New("error: Failed to decrypt raw fs stream")
+    if (flags & FLAG_ENCRYPT) == 1 {
+        /* The crypto key is composed of the MD5 of the hostname + the FS_SIGNATURE */
+        key := get_fs_key()
+
+        plaintext, err = crypto.RC4_Decrypt(raw_file.Bytes(), &key)
+        if err != nil {
+            return nil, errors.New("error: Failed to decrypt raw fs stream")
+        }
+    } else {
+        copy(plaintext, raw_file.Bytes())
     }
 
-    var b bytes.Buffer
-    b.Read(plaintext)
+    var decompressed []byte
 
-    reader, err := gzip.NewReader(&b)
-    defer reader.Close()
+    if (flags & FLAG_COMPRESS) == 1 {
+        var b bytes.Buffer
+        b.Read(plaintext)
 
-    decompressed, err := ioutil.ReadAll(reader)
-    if err != nil {
-        return nil, errors.New("error: Failed to decompress fs stream")
+        reader, err := gzip.NewReader(&b)
+        defer reader.Close()
+
+        decompressed, err = ioutil.ReadAll(reader)
+        if err != nil {
+            return nil, errors.New("error: Failed to decompress fs stream")
+        }
+    } else {
+        copy(decompressed, plaintext)
     }
 
     return decompressed, nil
@@ -538,18 +546,31 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
  * Takes in the serialized fs table, compresses it, encrypts it and writes it to the disk
  */
 func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int) (uint, error) {
+
     var compressed *bytes.Buffer = new(bytes.Buffer)
-    w := gzip.NewWriter(compressed)
-    w.Write(data.Bytes())
-    w.Close()
 
-    /* The crypto key will be the MD5 of the hostname string + the FS_SIGNATURE string */
-    key := get_fs_key()
+    if (flags & FLAG_COMPRESS) == 1 {
+        w := gzip.NewWriter(compressed)
+        w.Write(data.Bytes())
+        w.Close()
+    } else {
+        compressed.Write(data.Bytes())
+    }
 
-    /* Perform RC4 encryption */
-    ciphertext, err := crypto.RC4_Encrypt(data.Bytes(), &key)
-    if err != nil {
-        return 0, errors.New("error: Failure in invoking RC4 cipher on raw rs table")
+    var ciphertext []byte
+
+    if (flags & FLAG_ENCRYPT) == 1 {
+        /* The crypto key will be the MD5 of the hostname string + the FS_SIGNATURE string */
+        key := get_fs_key()
+
+        /* Perform RC4 encryption */
+        var err error
+        ciphertext, err = crypto.RC4_Encrypt(data.Bytes(), &key)
+        if err != nil {
+            return 0, errors.New("error: Failure in invoking RC4 cipher on raw rs table")
+        }
+    } else {
+        copy(ciphertext, compressed.Bytes())
     }
 
     if _, err := os.Stat(name); os.IsExist(err) {
