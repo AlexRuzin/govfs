@@ -496,12 +496,12 @@ func get_fs_key() []byte {
  */
 func read_fs_stream(name string, flags int) ([]byte, error) {
     if _, err := os.Stat(name); os.IsNotExist(err) {
-        return nil, errors.New("error: Cannot read from fs stream. File does not exist")
+        return nil, err
     }
 
     file, err := os.Create(name)
     if err != nil {
-        return nil, errors.New("error: Cannot read from fs stream.")
+        return nil, err
     }
     defer file.Close()
 
@@ -516,7 +516,7 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
 
         plaintext, err = crypto.RC4_Decrypt(raw_file.Bytes(), &key)
         if err != nil {
-            return nil, errors.New("error: Failed to decrypt raw fs stream")
+            return nil, err
         }
     } else {
         copy(plaintext, raw_file.Bytes())
@@ -533,7 +533,7 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
 
         decompressed, err = ioutil.ReadAll(reader)
         if err != nil {
-            return nil, errors.New("error: Failed to decompress fs stream")
+            return nil, err
         }
     } else {
         copy(decompressed, plaintext)
@@ -567,7 +567,7 @@ func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int
         var err error
         ciphertext, err = crypto.RC4_Encrypt(data.Bytes(), &key)
         if err != nil {
-            return 0, errors.New("error: Failure in invoking RC4 cipher on raw rs table")
+            return 0, err
         }
     } else {
         copy(ciphertext, compressed.Bytes())
@@ -579,13 +579,13 @@ func (f *gofs_header) write_fs_stream(name string, data *bytes.Buffer, flags int
 
     file, err := os.Create(name)
     if err != nil {
-        return 0, errors.New("write_fs_stream: Failed to create database file")
+        return 0, err
     }
     defer file.Close()
 
     written, err := file.Write(ciphertext)
     if err != nil {
-        return uint(written), errors.New("write_fs_stream: Failed to write database file")
+        return uint(written), err
     }
 
     return uint(written), nil
