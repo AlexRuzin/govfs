@@ -363,6 +363,42 @@ func (f *FSHeader) Delete(name string) error {
     return output_irp.status
 }
 
+/*
+ * Writer interface
+ */
+type Writer struct {
+    Name string
+    File *gofs_file
+    Hdr *FSHeader
+}
+
+func (f *FSHeader) NewWriter(name string) (*Writer, error) {
+    file := f.check(name)
+    if file == nil {
+        return nil, errors.New("error: File not found")
+    }
+
+    writer := &Writer {
+        Name: name,
+        File: file,
+        Hdr: f,
+    }
+
+    return writer, nil
+}
+
+func (f *Writer) Write(p []byte) (int, error) {
+    if len(p) < 1 {
+        return 0, errors.New("error: Invalid write stream length")
+    }
+
+    if err := f.Hdr.Write(f.Name, p); err != nil {
+        return 0, err
+    }
+
+    return len(p), io.EOF
+}
+
 func (f *FSHeader) Write(name string, d []byte) error {
     if i := f.check(name); i == nil {
         return errors.New("write: Cannot write to nonexistent file")
