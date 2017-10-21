@@ -51,6 +51,9 @@ func TestFSWriter(t *testing.T) {
     if header == nil {
         drive_fail("TEST1: Failed to obtain header", t)
     }
+    if err := header.StartIOController(); err != nil {
+        drive_fail("TEST1.1: Failed to start IOController", t)
+    }
     out("[+] Test 1 PASS")
     
     // The root file "/" must at least exist
@@ -278,6 +281,10 @@ func TestFSReader(t *testing.T) {
     var header = CreateDatabase(filename, 0)
     if header == nil {
         drive_fail("TEST1: Failed to obtain header", t)
+    }
+
+    if err := header.StartIOController(); err != nil {
+        drive_fail("TEST1.1: Failed to start IOController", t)
     }
     out("[+] Test 1 PASS (Loaded FS stream)")
 }
