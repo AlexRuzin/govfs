@@ -219,7 +219,29 @@ func TestIOSanity(t *testing.T) {
     if data_read != 1 || err != nil || file0data[0] != 1 {
         drive_fail("TEST15.3: Invalid Reader interface behaviour", t)
     }
-    out("[+] Test 15.1, 15.2, 15.3 PASS")
+    out("[+] Test 15.1, 15.2, 15.3 PASS -- Reader interface")
+
+    /*
+     * Tests the Writer interface
+     */
+    file0data = []byte{1, 2, 3, 4, 5, 6, 7, 8}
+    writer, err := header.NewWriter("/folder0/folder0/file0")
+    if writer == nil || err != nil {
+        drive_fail("TEST15.4: Invalid Writer object", t)
+    }
+
+    written, err := writer.Write(file0data)
+    if written != len(file0data) || err != io.EOF {
+        drive_fail("TEST15.4: Invalid Writer response", t)
+    }
+
+    file0data = make([]byte, 8)
+    data_read, err = reader.Read(file0data)
+    if data_read != 8 || err != io.EOF || file0data[0] != 1 || file0data[1] != 2 {
+        drive_fail("TEST15.5: Invalid Reader data",t )
+    }
+    out("[+] Test 15.4, 15.5 PASS -- Writer interface")
+
 
     /*
      * Print out files
