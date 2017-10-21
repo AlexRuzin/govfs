@@ -207,12 +207,19 @@ func TestIOSanity(t *testing.T) {
         drive_fail("TEST15.1: Failed to create Reader", t)
     }
 
-    file0data := make([]byte, reader.Len())
+    file0data := make([]byte, 3)
     data_read, err := reader.Read(file0data)
     if data_read != len(data) || err != io.EOF || bytes.Compare(file0data, data) != 0 {
         drive_fail("TEST15.2: Failed to read from NewReader", t)
     }
-    out("[+] Test 15.1, 15.2 PASS")
+
+    /* Test the reader interface again */
+    file0data = make([]byte, 1)
+    data_read, err = reader.Read(file0data)
+    if data_read != 1 || err != nil || file0data[0] != 1 {
+        drive_fail("TEST15.3: Invalid Reader interface behaviour", t)
+    }
+    out("[+] Test 15.1, 15.2, 15.3 PASS")
 
     /*
      * Print out files
@@ -225,7 +232,7 @@ func TestIOSanity(t *testing.T) {
     /*
      * Unmount/commit database to file
      */
-    if header.unmount_db() != nil {
+    if err := header.unmount_db(); err != nil {
         drive_fail("TEST16: Failed to commit database", t)
     }
     out("[+] Test 16 PASS. Raw FS stream written to: " + header.filename)
