@@ -323,6 +323,13 @@ func (f *Reader) Read(r []byte) (int, error) {
         return 0, err
     }
 
+    /* Fix the length of r */
+    if len(r) < len(data) {
+        copy(r, data[:len(data) - len(r) - 1])
+        return len(data) - len(r) - 1, nil
+    }
+
+    /* Sufficient in length, so copy & return EOF */
     copy(r, data)
 
     return len(data), io.EOF
@@ -617,6 +624,7 @@ func (f *FSHeader) write_fs_stream(name string, data *bytes.Buffer, flags int) (
             return 0, err
         }
     } else {
+        ciphertext = make([]byte, compressed.Len())
         copy(ciphertext, compressed.Bytes())
     }
 
