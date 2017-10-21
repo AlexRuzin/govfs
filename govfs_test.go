@@ -29,6 +29,7 @@ import (
     "io"
     _"bytes"
     "bytes"
+    "runtime"
 )
 
 const FS_DATABASE_FILE string = "test_db"
@@ -282,7 +283,15 @@ func TestFSReader(t *testing.T) {
 }
 
 func gen_raw_filename(suffix string) string {
-    return os.Getenv("TEMP") + "\\" + suffix + ".db"
+    if runtime.GOOS == "windows" {
+        return os.Getenv("TEMP") + "\\" + suffix + ".db"
+    }
+
+    if runtime.GOOS == "linux" {
+        return suffix + ".db"
+    }
+
+    return suffix + ".db"
 }
 
 func drive_fail(output string, t *testing.T) {
