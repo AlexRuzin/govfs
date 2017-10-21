@@ -33,7 +33,7 @@ import (
 
 const FS_DATABASE_FILE string = "test_db"
 
-func TestIOSanity(t *testing.T) {
+func TestFSWriter(t *testing.T) {
     /*
      * This test will generate the raw fs stream file, along with some contents
      *  that will be later loaded by the TestFSReader() method
