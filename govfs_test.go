@@ -47,9 +47,9 @@ func TestFSWriter(t *testing.T) {
         os.Remove(filename)
     }
 
-    var header = CreateDatabase(filename, 0)
-    if header == nil {
-        drive_fail("TEST1: Failed to obtain header", t)
+    var header, err = CreateDatabase(filename, 0)
+    if header == nil || err != nil {
+        drive_fail(err.Error(), t)
     }
     if err := header.StartIOController(); err != nil {
         drive_fail("TEST1.1: Failed to start IOController", t)
@@ -246,7 +246,6 @@ func TestFSWriter(t *testing.T) {
     }
     out("[+] Test 15.4, 15.5 PASS -- Writer interface")
 
-
     /*
      * Print out files
      */
@@ -278,8 +277,8 @@ func TestFSReader(t *testing.T) {
         drive_fail("error: Standard raw fs stream " + filename + " does not exist", t)
     }
 
-    var header = CreateDatabase(filename, 0)
-    if header == nil {
+    header, err := CreateDatabase(filename, 0)
+    if header == nil || err != nil {
         drive_fail("TEST1: Failed to obtain header", t)
     }
 

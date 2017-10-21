@@ -98,14 +98,20 @@ type gofs_io_block struct {
  *
  * Flags: FLAG_ENCRYPT, FLAG_COMPRESS
  */
-func CreateDatabase(name string, flags int) *FSHeader {
+func CreateDatabase(name string, flags int) (*FSHeader, error) {
     var header *FSHeader
 
     if name != "" {
         /* Check if the file exists */
         if _, err := os.Stat(name); os.IsExist(err) {
-            raw, _ := read_fs_stream(name, flags)
-            header, _ = load_header(raw)
+            raw, err := read_fs_stream(name, flags)
+            if raw == nil || err != nil {
+                return nil, err
+            }
+            header, err = load_header(raw)
+            if header == nil || err != nil {
+                return nil, err
+            }
         }
     }
 
@@ -121,7 +127,7 @@ func CreateDatabase(name string, flags int) *FSHeader {
         header.meta[s("/")].filename = "/"
     } /* test change */
 
-    return header
+    return header, nil
 }
 
 func (f *FSHeader) StartIOController() error {
