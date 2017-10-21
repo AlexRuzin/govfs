@@ -121,6 +121,12 @@ func CreateDatabase(name string, flags int) *FSHeader {
         header.meta[s("/")].filename = "/"
     } /* test change */
 
+    return header
+}
+
+func (f *FSHeader) StartIOController() error {
+    var header *FSHeader = f
+
     /* i/o channel processor. Performs i/o to the filesystem */
     header.io_in = make(chan *gofs_io_block)
     go func (f *FSHeader) {
@@ -200,7 +206,7 @@ func CreateDatabase(name string, flags int) *FSHeader {
         }
     } (header)
 
-    return header
+    return nil
 }
 
 func (f *FSHeader) check(name string) *gofs_file {
