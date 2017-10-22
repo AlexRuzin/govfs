@@ -257,7 +257,7 @@ func TestFSWriter(t *testing.T) {
     /*
      * Unmount/commit database to file
      */
-    if err := header.unmount_db(); err != nil {
+    if err := header.UnmountDB(); err != nil {
         drive_fail("TEST16: Failed to commit database", t)
     }
     out("[+] Test 16 PASS. Raw FS stream written to: " + header.filename)

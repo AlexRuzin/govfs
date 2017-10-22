@@ -457,7 +457,7 @@ func (f *FSHeader) write_internal(d *gofs_file, data []byte) int {
     return datalen
 }
 
-func (f *FSHeader) unmount_db() error {
+func (f *FSHeader) UnmountDB() error {
     type RawFile /* Capitalize for the sake of exporting */ struct {
         RawSum [16]byte
         GZIPSize uint
