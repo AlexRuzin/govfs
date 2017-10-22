@@ -64,6 +64,8 @@ const FLAG_FILE                 int = 1
 const FLAG_DIRECTORY            int = 2
 const FLAG_COMPRESS             int = 4 /* Compression on the fs serialized output */
 const FLAG_ENCRYPT              int = 8 /* Encryption on the fs serialized output */
+const FLAG_DB_LOAD              int = 16 /* Loads the database */
+const FLAG_DB_CREATE            int = 32 /* Creates the database */
 
 type FSHeader struct {
     filename    string
@@ -101,7 +103,7 @@ type gofs_io_block struct {
 func CreateDatabase(name string, flags int) (*FSHeader, error) {
     var header *FSHeader
 
-    if name != "" {
+    if (flags & FLAG_DB_LOAD) == 1 {
         /* Check if the file exists */
         if _, err := os.Stat(name); os.IsExist(err) {
             raw, err := read_fs_stream(name, flags)
@@ -115,18 +117,21 @@ func CreateDatabase(name string, flags int) (*FSHeader, error) {
         }
     }
 
-    if header == nil {
+    if (flags & FLAG_DB_CREATE) == 1 {
         /* Either the raw fs does not exist, or it is invalid -- create new */
         header = &FSHeader{
             filename: name,
-            meta: make(map[string]*gofs_file),
+            meta:     make(map[string]*gofs_file),
         }
 
         /* Generate the standard "/" file */
         header.meta[s("/")] = new(gofs_file)
         header.meta[s("/")].filename = "/"
-    } /* test change */
+    }
 
+    if header == nil {
+        return nil, errors.New("error: Invalid header. Failed to generate database header")
+    }
     return header, nil
 }
 
