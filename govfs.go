@@ -105,6 +105,17 @@ type raw_stream_hdr struct {
 }
 
 /*
+ * The meta header for each raw file
+ *  (gofs_file is the virtual, in-memory file header)
+ */
+type RawFile /* Export required for gob serializer */ struct {
+    RawSum [16]byte
+    GZIPSize uint
+    Flags int
+    Name string
+}
+
+/*
  * Creates or loads a filesystem database file. If the filename is nil, then create a new database
  *  otherwise try to load an existing fs database file.
  *
@@ -470,13 +481,6 @@ func (f *FSHeader) write_internal(d *gofs_file, data []byte) int {
 }
 
 func (f *FSHeader) UnmountDB() error {
-    type RawFile /* Capitalize for the sake of exporting */ struct {
-        RawSum [16]byte
-        GZIPSize uint
-        Flags int
-        Name [MAX_FILENAME_LENGTH]byte
-    }
-
     type comp_data struct {
         file *gofs_file
         data_compressed []byte
@@ -512,7 +516,7 @@ func (f *FSHeader) UnmountDB() error {
                 d.raw.RawSum = md5.Sum(d.file.data)
                 d.raw.GZIPSize = uint(len(d.data_compressed))
                 d.raw.Flags = FLAG_FILE
-                copy(d.raw.Name[:], d.file.filename)
+                d.raw.Name = d.file.filename
 
                 commit_ch <- d
             }
@@ -520,14 +524,14 @@ func (f *FSHeader) UnmountDB() error {
             if d.file.filetype == FLAG_DIRECTORY {
                 /* Directory type file. No need for compression, but the metadata must exist */
                 d.raw.Flags = FLAG_DIRECTORY
-                copy(d.raw.Name[:], d.file.filename)
+                d.raw.Name = d.file.filename
                 commit_ch <- d
             }
 
             if d.file.filetype == FLAG_FILE && len(d.file.data) == 0 {
                 /* Empty file. Does not need compression but metadata must exist */
                 d.raw.Flags = FLAG_FILE
-                copy(d.raw.Name[:], d.file.filename)
+                d.raw.Name = d.file.filename
                 commit_ch <- d
             }
         }(header)
@@ -588,22 +592,43 @@ func (f *FSHeader) UnmountDB() error {
 func load_header(data []byte) (*FSHeader, error) {
     out(string(data)) /* FIXME -- remove this */
 
-    header, err := func (p []byte) (*raw_stream_hdr, error) {
+    /* Parse the file header */
+    ptr := bytes.NewBuffer(data)
+    header, err := func (p *bytes.Buffer) (*raw_stream_hdr, error) {
         output := new(raw_stream_hdr)
 
-        b := bytes.Buffer{}
-        b.Write(p)
-        d := gob.NewDecoder(&b)
+        d := gob.NewDecoder(p)
         err := d.Decode(output)
         if err != nil {
             return nil, err
-        } else {
-            return output, nil
         }
-    } (data)
 
-    if err != nil || header == nil {
+        return output, nil
+    } (ptr)
+
+    if err != nil || header == nil || header.Signature != FS_SIGNATURE {
         return nil, err
+    }
+
+    /* Enumerate files */
+    for {
+        file_hdr, err := func (p *bytes.Buffer) (*RawFile, error) {
+            output := new(RawFile)
+
+            d := gob.NewDecoder(p)
+            err := d.Decode(output)
+            if err != nil {
+                return nil, err
+            }
+
+            return output, nil
+        } (ptr)
+
+        if err != nil {
+            return nil, err
+        }
+
+        out(file_hdr.Name)
     }
 
     return nil, errors.New("Unknown error")
