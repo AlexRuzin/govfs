@@ -106,7 +106,7 @@ func CreateDatabase(name string, flags int) (*FSHeader, error) {
 
     if (flags & FLAG_DB_LOAD) > 0 {
         /* Check if the file exists */
-        if _, err := os.Stat(name); os.IsExist(err) {
+        if _, err := os.Stat(name); !os.IsNotExist(err) {
             raw, err := read_fs_stream(name, flags)
             if raw == nil || err != nil {
                 return nil, err
@@ -609,14 +609,10 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
         return nil, err
     }
 
-    file, err := os.Create(name)
+    raw_file, err := ioutil.ReadFile(name)
     if err != nil {
         return nil, err
     }
-    defer file.Close()
-
-    raw_file := bytes.NewBuffer(nil)
-    io.Copy(raw_file, file)
 
     var plaintext []byte
 
@@ -624,12 +620,13 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
         /* The crypto key is composed of the MD5 of the hostname + the FS_SIGNATURE */
         key := get_fs_key()
 
-        plaintext, err = crypto.RC4_Decrypt(raw_file.Bytes(), &key)
+        plaintext, err = crypto.RC4_Decrypt(raw_file, &key)
         if err != nil {
             return nil, err
         }
     } else {
-        copy(plaintext, raw_file.Bytes())
+        plaintext = make([]byte, len(raw_file))
+        copy(plaintext, raw_file)
     }
 
     var decompressed []byte
@@ -646,6 +643,7 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
             return nil, err
         }
     } else {
+        decompressed = make([]byte, len(plaintext))
         copy(decompressed, plaintext)
     }
 
