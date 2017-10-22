@@ -96,6 +96,15 @@ type gofs_io_block struct {
 }
 
 /*
+ * Header which indicates the beginning of the raw filesystem file, written
+ *  to the disk.
+ */
+type raw_stream_hdr struct {
+    Signature string /* Uppercase so that it's "exported" i.e. visibile to the encoder */
+    FileCount uint
+}
+
+/*
  * Creates or loads a filesystem database file. If the filename is nil, then create a new database
  *  otherwise try to load an existing fs database file.
  *
@@ -530,11 +539,7 @@ func (f *FSHeader) UnmountDB() error {
     /*
      * Generate the primary filesystem header and write it to the fs_stream
      */
-    type fs_header struct {
-        Signature string /* Uppercase so that it's "exported" i.e. visibile to the encoder */
-        FileCount uint
-    }
-    hdr := fs_header {
+    hdr := raw_stream_hdr {
         Signature:  FS_SIGNATURE, /* This signature may be modified in the configuration -- FIXME */
         FileCount:  total_files }
 
@@ -581,7 +586,26 @@ func (f *FSHeader) UnmountDB() error {
 }
 
 func load_header(data []byte) (*FSHeader, error) {
-    out(string(data))
+    out(string(data)) /* FIXME -- remove this */
+
+    header, err := func (p []byte) (*raw_stream_hdr, error) {
+        output := new(raw_stream_hdr)
+
+        b := bytes.Buffer{}
+        b.Write(p)
+        d := gob.NewDecoder(&b)
+        err := d.Decode(output)
+        if err != nil {
+            return nil, err
+        } else {
+            return output, nil
+        }
+    } (data)
+
+    if err != nil || header == nil {
+        return nil, err
+    }
+
     return nil, errors.New("Unknown error")
 }
 
