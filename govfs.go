@@ -103,7 +103,7 @@ type gofs_io_block struct {
 func CreateDatabase(name string, flags int) (*FSHeader, error) {
     var header *FSHeader
 
-    if (flags & FLAG_DB_LOAD) == 1 {
+    if (flags & FLAG_DB_LOAD) > 0 {
         /* Check if the file exists */
         if _, err := os.Stat(name); os.IsExist(err) {
             raw, err := read_fs_stream(name, flags)
@@ -117,7 +117,7 @@ func CreateDatabase(name string, flags int) (*FSHeader, error) {
         }
     }
 
-    if (flags & FLAG_DB_CREATE) == 1 {
+    if (flags & FLAG_DB_CREATE) > 0 {
         /* Either the raw fs does not exist, or it is invalid -- create new */
         header = &FSHeader{
             filename: name,
@@ -617,7 +617,7 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
 
     var plaintext []byte
 
-    if (flags & FLAG_ENCRYPT) == 1 {
+    if (flags & FLAG_ENCRYPT) > 0 {
         /* The crypto key is composed of the MD5 of the hostname + the FS_SIGNATURE */
         key := get_fs_key()
 
@@ -631,7 +631,7 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
 
     var decompressed []byte
 
-    if (flags & FLAG_COMPRESS) == 1 {
+    if (flags & FLAG_COMPRESS) > 0 {
         var b bytes.Buffer
         b.Read(plaintext)
 
@@ -656,7 +656,7 @@ func (f *FSHeader) write_fs_stream(name string, data *bytes.Buffer, flags int) (
 
     var compressed = new(bytes.Buffer)
 
-    if (flags & FLAG_COMPRESS) == 1 {
+    if (flags & FLAG_COMPRESS) > 0 {
         w := gzip.NewWriter(compressed)
         w.Write(data.Bytes())
         w.Close()
@@ -666,7 +666,7 @@ func (f *FSHeader) write_fs_stream(name string, data *bytes.Buffer, flags int) (
 
     var ciphertext []byte
 
-    if (flags & FLAG_ENCRYPT) == 1 {
+    if (flags & FLAG_ENCRYPT) > 0 {
         /* The crypto key will be the MD5 of the hostname string + the FS_SIGNATURE string */
         key := get_fs_key()
 
