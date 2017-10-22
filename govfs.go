@@ -74,6 +74,7 @@ type FSHeader struct {
     t_size      uint /* Total size of all files */
     io_in       chan *gofs_io_block
     create_sync sync.Mutex
+    flags       int /* Generic flags as passed in by CreateDatabase() */
 }
 
 type gofs_file struct {
@@ -132,6 +133,8 @@ func CreateDatabase(name string, flags int) (*FSHeader, error) {
     if header == nil {
         return nil, errors.New("error: Invalid header. Failed to generate database header")
     }
+
+    header.flags = flags
     return header, nil
 }
 
@@ -569,7 +572,7 @@ func (f *FSHeader) UnmountDB() error {
     close(commit_ch)
 
     /* Compress, encrypt, and write stream */
-    written, err := f.write_fs_stream(f.filename, stream, FLAG_COMPRESS | FLAG_ENCRYPT)
+    written, err := f.write_fs_stream(f.filename, stream, f.flags)
     if err != nil || int(written) == 0 {
         return errors.New("error: Failure in writing raw fs stream")
     }
