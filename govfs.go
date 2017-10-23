@@ -332,6 +332,7 @@ type Reader struct {
     Name string
     File *gofs_file
     Hdr *FSHeader
+    Offset int
 }
 
 func (f *FSHeader) NewReader(name string) (*Reader, error) {
@@ -344,6 +345,7 @@ func (f *FSHeader) NewReader(name string) (*Reader, error) {
         Name: name,
         File: file,
         Hdr: f,
+        Offset: 0,
     }
 
     return reader, nil
@@ -363,8 +365,8 @@ func (f *Reader) Read(r []byte) (int, error) {
         return 0, err
     }
 
-    /* Fix the length of r */
     if len(r) < len(data) {
+        f.Offset += len(r)
         copy(r, data[:len(data) - len(r) - 1])
         return len(data) - len(r) - 1, nil
     }
