@@ -48,6 +48,7 @@ import (
     "io"
     "io/ioutil"
     _"time"
+    _"golang.org/x/crypto/ssh/test"
 )
 
 /*
@@ -490,15 +491,16 @@ func (f *FSHeader) UnmountDB() error {
         raw RawFile
     }
 
-    commit_ch := make(chan *bytes.Buffer)
+    commit_ch := make(chan []byte)
     for k := range f.meta {
-        header := &comp_data{ file: f.meta[k] }
-        header.raw = RawFile{
+        var channel_header comp_data
+        channel_header.file = f.meta[k]
+        channel_header.raw = RawFile{
             Flags: f.meta[k].flags,
             RawSum: f.meta[k].datasum,
             Name: f.meta[k].filename,
         }
-        header.raw.GZIPData = bytes.Buffer{}
+        channel_header.raw.GZIPData = bytes.Buffer{}
 
         go func (d *comp_data) {
             if d.file.filename == "/" {
@@ -522,14 +524,17 @@ func (f *FSHeader) UnmountDB() error {
                 e := gob.NewEncoder(&b)
                 e.Encode(p)
                 return &b
-            } (header.raw) /* Pass in RawFile */
+            } (channel_header.raw) /* Pass in RawFile */
 
             for i := STREAM_PAD_LEN; i != 0; i -= 1 {
                 serialized_fileheader.WriteByte(0)
             }
 
-            commit_ch <- serialized_fileheader
-        }(header)
+            output := make([]byte, serialized_fileheader.Len())
+            copy(output, serialized_fileheader.Bytes())
+
+            commit_ch <- output
+        }(&channel_header)
         //time.Sleep(0)
     }
 
@@ -556,10 +561,9 @@ func (f *FSHeader) UnmountDB() error {
 
     /* serialized RawFile metadata includes the gzip'd file data, if necessary */
     for total_files != 0 {
-        var header = <- commit_ch
+        var meta_raw = <- commit_ch
 
-        /* Write header and purge pad */
-        stream.ReadFrom(header)
+        stream.Write(meta_raw)
 
         total_files -= 1
     }
