@@ -47,6 +47,7 @@ import (
     "github.com/AlexRuzin/crypto"
     "io"
     "io/ioutil"
+    "time"
 )
 
 /*
@@ -79,7 +80,7 @@ type FSHeader struct {
 
 type gofs_file struct {
     filename    string
-    filetype    int /* FLAG_FILE, FLAG_DIRECTORY */
+    flags       int /* FLAG_FILE, FLAG_DIRECTORY */
     datasum     string
     data        []byte
     lock        sync.Mutex
@@ -109,10 +110,10 @@ type raw_stream_hdr struct {
  *  (gofs_file is the virtual, in-memory file header)
  */
 type RawFile /* Export required for gob serializer */ struct {
-    RawSum [16]byte
-    GZIPSize uint
+    RawSum string
     Flags int
     Name string
+    GZIPData bytes.Buffer
 }
 
 /*
@@ -131,7 +132,7 @@ func CreateDatabase(name string, flags int) (*FSHeader, error) {
             if raw == nil || err != nil {
                 return nil, err
             }
-            header, err = load_header(raw)
+            header, err = load_header(raw, name)
             if header == nil || err != nil {
                 return nil, err
             }
@@ -208,9 +209,9 @@ func (f *FSHeader) StartIOController() error {
                 io.file.filename = io.name
 
                 if string(io.name[len(io.name) - 1:]) == "/" {
-                    io.file.filetype = FLAG_DIRECTORY
+                    io.file.flags |= FLAG_DIRECTORY
                 } else {
-                    io.file.filetype = FLAG_FILE
+                    io.file.flags |= FLAG_FILE
                 }
 
                 /* Recursively create all subdirectory files */
@@ -230,7 +231,7 @@ func (f *FSHeader) StartIOController() error {
 
                         f.meta[s(tmp)] = new(gofs_file)
                         f.meta[s(tmp)].filename = sub_directory + "/" /* Explicit directory name */
-                        f.meta[s(tmp)].filetype = FLAG_DIRECTORY
+                        f.meta[s(tmp)].flags |= FLAG_DIRECTORY
                     } (tmp, f)
                 }
 
@@ -383,7 +384,7 @@ func (f *FSHeader) Read(name string) ([]byte, error) {
         return nil, errors.New("read: File does not exist")
     }
 
-    if file_header.filetype == FLAG_DIRECTORY {
+    if (file_header.flags & FLAG_DIRECTORY) > 0 {
         return nil, errors.New("read: Cannot read a directory")
     }
 
@@ -485,58 +486,46 @@ func (f *FSHeader) write_internal(d *gofs_file, data []byte) int {
 func (f *FSHeader) UnmountDB() error {
     type comp_data struct {
         file *gofs_file
-        data_compressed []byte
         raw RawFile
     }
 
-    commit_ch := make(chan *comp_data)
+    commit_ch := make(chan *bytes.Buffer)
     for k := range f.meta {
         header := &comp_data{ file: f.meta[k] }
+        header.raw = RawFile{
+            Flags: f.meta[k].flags,
+            RawSum: f.meta[k].datasum,
+            Name: f.meta[k].filename,
+        }
+        header.raw.GZIPData = bytes.Buffer{}
 
         go func (d *comp_data) {
             if d.file.filename == "/" {
                 return
             }
 
-            /*
-             * Perform compression of the file, and store it in 'd'
-             */
-            if d.file.filetype == FLAG_FILE /* File */ && len(d.file.data) > 0 {
+            if (d.file.flags & FLAG_FILE) > 0 /* File */ && len(d.file.data) > 0 {
                 /* Compression required since this is a file, and it's length is > 0 */
-                buf := func (data []byte) *bytes.Buffer {
-                    var output = new(bytes.Buffer)
-                    w := gzip.NewWriter(output)
-                    w.Write(d.file.data)
-                    w.Close()
 
-                    return output
-                } (d.file.data)
+                var zip_buf = bytes.NewBuffer(nil)
+                gzip_writer := gzip.NewWriter(zip_buf)
+                gzip_writer.Write(d.file.data)
 
-                d.data_compressed = make([]byte, buf.Len())
-                buf.Write(d.data_compressed)
-
-                d.raw.RawSum = md5.Sum(d.file.data)
-                d.raw.GZIPSize = uint(len(d.data_compressed))
-                d.raw.Flags = FLAG_FILE
-                d.raw.Name = d.file.filename
-
-                commit_ch <- d
+                d.raw.GZIPData = bytes.Buffer{}
+                d.raw.GZIPData.ReadFrom(zip_buf)
             }
 
-            if d.file.filetype == FLAG_DIRECTORY {
-                /* Directory type file. No need for compression, but the metadata must exist */
-                d.raw.Flags = FLAG_DIRECTORY
-                d.raw.Name = d.file.filename
-                commit_ch <- d
-            }
+            /* Serialize the header (which contains the gzip buffer) */
+            serialized_fileheader := func (p RawFile) *bytes.Buffer {
+                b := bytes.Buffer{}
+                e := gob.NewEncoder(&b)
+                e.Encode(p)
+                return &b
+            } (header.raw) /* Pass in RawFile */
 
-            if d.file.filetype == FLAG_FILE && len(d.file.data) == 0 {
-                /* Empty file. Does not need compression but metadata must exist */
-                d.raw.Flags = FLAG_FILE
-                d.raw.Name = d.file.filename
-                commit_ch <- d
-            }
+            commit_ch <- serialized_fileheader
         }(header)
+        time.Sleep(0)
     }
 
     /* Do not count "/" as a file, since it is not sent in channel */
@@ -550,33 +539,20 @@ func (f *FSHeader) UnmountDB() error {
         FileCount:  total_files }
 
     /* Serializer for fs_header */
-    stream := func (object interface{}) *bytes.Buffer {
+    stream := func (hdr raw_stream_hdr) *bytes.Buffer {
         b := new(bytes.Buffer)
         e := gob.NewEncoder(b)
-        if err := e.Encode(object); err != nil {
+        if err := e.Encode(hdr); err != nil {
             return nil /* Failure in encoding the fs_header structure -- Should not happen */
         }
 
         return b
     } (hdr)
 
+    /* serialized RawFile metadata includes the gzip'd file data, if necessary */
     for total_files != 0 {
         var header = <- commit_ch
-
-        /* Append the header */
-        serialized_fileheader := func (object interface{}) *bytes.Buffer {
-            b := new(bytes.Buffer)
-            e := gob.NewEncoder(b)
-            if err := e.Encode(object); err != nil {
-                return nil /* This should be an assertion -- FIXME */
-            }
-            return b
-        } (header.raw) /* Pass in RawFile */
-        stream.Write(serialized_fileheader.Bytes())
-
-        /* Append the compressed data */
-        stream.Write(header.data_compressed)
-
+        stream.ReadFrom(header)
         total_files -= 1
     }
 
@@ -591,9 +567,7 @@ func (f *FSHeader) UnmountDB() error {
     return err
 }
 
-func load_header(data []byte) (*FSHeader, error) {
-    out(string(data)) /* FIXME -- remove this */
-
+func load_header(data []byte, filename string) (*FSHeader, error) {
     /* Parse the file header */
     ptr := bytes.NewBuffer(data)
     header, err := func (p *bytes.Buffer) (*raw_stream_hdr, error) {
@@ -612,10 +586,17 @@ func load_header(data []byte) (*FSHeader, error) {
         return nil, err
     }
 
+    output := &FSHeader{
+        filename: filename,
+        meta:     make(map[string]*gofs_file),
+    }
+    output.meta[s("/")] = new(gofs_file)
+    output.meta[s("/")].filename = "/"
+
     /* Enumerate files */
     for {
         file_hdr, err := func (p *bytes.Buffer) (*RawFile, error) {
-            output := new(RawFile)
+            output := &RawFile{}
 
             d := gob.NewDecoder(p)
             err := d.Decode(output)
@@ -630,10 +611,27 @@ func load_header(data []byte) (*FSHeader, error) {
             return nil, err
         }
 
-        out(file_hdr.Name)
+        output.meta[s(file_hdr.Name)] = &gofs_file{
+            filename: file_hdr.Name,
+            flags: file_hdr.Flags,
+            data: nil,
+            datasum: "",
+        }
+
+        if file_hdr.GZIPData.Len() > 0 {
+            output.meta[s(file_hdr.Name)].datasum = file_hdr.RawSum
+            r, err := gzip.NewReader(ptr)
+            if err != nil {
+                return nil, err
+            }
+            var decompressed = make([]byte, file_hdr.GZIPData.Len())
+            //output.meta[s(file_hdr.Name)].data = make([]byte, file_hdr.GZIPSize)
+            r.Read(decompressed)
+            output.meta[s(file_hdr.Name)].data = decompressed
+        }
     }
 
-    return nil, errors.New("Unknown error")
+    return output, nil
 }
 
 /*
@@ -778,7 +776,7 @@ func (f *FSHeader) get_file_list() []string {
 
     for k := range f.meta {
         file := f.meta[k]
-        if file.filetype == FLAG_DIRECTORY {
+        if (file.flags & FLAG_DIRECTORY) > 0 {
             output = append(output, "(DIR)  " + file.filename)
             continue
         }
