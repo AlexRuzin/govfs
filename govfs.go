@@ -55,6 +55,7 @@ import (
  */
 const MAX_FILENAME_LENGTH       int = 256
 const FS_SIGNATURE              string = "govfs_header" /* Cannot exceed 64 */
+const STREAM_PAD_LEN            int = 512 /* Length of the pad between two serialized RawFile structs */
 
 const IRP_PURGE                 int = 2 /* Flush the entire database and all files */
 const IRP_DELETE                int = 3 /* Delete a file/folder */
@@ -523,6 +524,10 @@ func (f *FSHeader) UnmountDB() error {
                 return &b
             } (header.raw) /* Pass in RawFile */
 
+            for i := STREAM_PAD_LEN; i != 0; i -= 1 {
+                serialized_fileheader.WriteByte(0)
+            }
+
             commit_ch <- serialized_fileheader
         }(header)
         time.Sleep(0)
@@ -552,7 +557,10 @@ func (f *FSHeader) UnmountDB() error {
     /* serialized RawFile metadata includes the gzip'd file data, if necessary */
     for total_files != 0 {
         var header = <- commit_ch
+
+        /* Write header and purge pad */
         stream.ReadFrom(header)
+
         total_files -= 1
     }
 
@@ -602,6 +610,10 @@ func load_header(data []byte, filename string) (*FSHeader, error) {
             err := d.Decode(output)
             if err != nil {
                 return nil, err
+            }
+
+            for i := STREAM_PAD_LEN; i != 0; i -= 1 {
+                p.UnreadByte()
             }
 
             return output, nil
