@@ -69,6 +69,25 @@ func (f *FSHeader) Delete(name string) error
 func (f *FSHeader) Write(name string, d []byte) error
 ```
 
+### Writer interface
+```go
+type Writer struct {
+    Name string
+    File *gofs_file
+    Hdr *FSHeader
+}
+```
+
+### New Writer method
+```go
+func (f *FSHeader) NewWriter(name string) (*Writer, error)
+```
+
+### Write method
+```go
+func (f *Writer) Write(p []byte) (int, error)
+```
+
 ### Disclaimer
 Please see the `LICENSE` file for the detailed MIT license. 
 All work written by **Stan Ruzin** _stan_ [dot] _ruzin_ [at] _gmail_ [dot] _com_
