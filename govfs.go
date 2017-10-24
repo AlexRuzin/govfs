@@ -47,7 +47,7 @@ import (
     "github.com/AlexRuzin/crypto"
     "io"
     "io/ioutil"
-    "time"
+    _"time"
 )
 
 /*
@@ -55,7 +55,7 @@ import (
  */
 const MAX_FILENAME_LENGTH       int = 256
 const FS_SIGNATURE              string = "govfs_header" /* Cannot exceed 64 */
-const STREAM_PAD_LEN            int = 512 /* Length of the pad between two serialized RawFile structs */
+const STREAM_PAD_LEN            int = 1024 /* Length of the pad between two serialized RawFile structs */
 
 const IRP_PURGE                 int = 2 /* Flush the entire database and all files */
 const IRP_DELETE                int = 3 /* Delete a file/folder */
@@ -530,7 +530,7 @@ func (f *FSHeader) UnmountDB() error {
 
             commit_ch <- serialized_fileheader
         }(header)
-        time.Sleep(0)
+        //time.Sleep(0)
     }
 
     /* Do not count "/" as a file, since it is not sent in channel */
@@ -608,7 +608,7 @@ func load_header(data []byte, filename string) (*FSHeader, error) {
 
             d := gob.NewDecoder(p)
             err := d.Decode(output)
-            if err != nil {
+            if err != nil && err != io.EOF {
                 return nil, err
             }
 
