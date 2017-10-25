@@ -32,7 +32,8 @@ import (
     "runtime"
     "encoding/gob"
 	"log"
-	"fmt"
+	_"fmt"
+    "fmt"
 )
 
 const FS_DATABASE_FILE string = "test_db"
@@ -68,17 +69,17 @@ func TestGOBEncoderSample(t *testing.T) {
 	}
 
 	// Decode (receive) and print the values.
-	var q Q
+	var q P
 	err = dec.Decode(&q)
 	if err != nil {
 		log.Fatal("decode error 1:", err)
 	}
-	fmt.Printf("%q: {%d, %d}\n", q.Name, *q.X, *q.Y)
+	fmt.Printf("%q: {%d, %d}\n", q.Name, q.X, q.Y)
 	err = dec.Decode(&q)
 	if err != nil {
 		log.Fatal("decode error 2:", err)
 	}
-	fmt.Printf("%q: {%d, %d}\n", q.Name, *q.X, *q.Y)
+	fmt.Printf("%q: {%d, %d}\n", q.Name, q.X, q.Y)
 
 	// Output:
 	// "Pythagoras": {3, 4}
