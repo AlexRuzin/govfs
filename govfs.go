@@ -505,7 +505,7 @@ func (f *FSHeader) UnmountDB() error {
         }
         channel_header.raw.GZIPData = bytes.Buffer{}
 
-        func (d *comp_data) {
+        go func (d *comp_data) {
             if d.file.filename == "/" {
                 return
             }
@@ -521,37 +521,14 @@ func (f *FSHeader) UnmountDB() error {
                 d.raw.GZIPData.ReadFrom(zip_buf)
             }
 
-            /* Serialize the header (which contains the gzip buffer) */
-            serialized_fileheader := func (p RawFile) *bytes.Buffer {
-                b := bytes.Buffer{}
-                e := gob.NewEncoder(&b)
-                e.Encode(p)
-                return &b
-            } (channel_header.raw) /* Pass in RawFile */
-
-            for i := STREAM_PAD_LEN; i != 0; i -= 1 {
-                serialized_fileheader.WriteByte(0)
+            var output bytes.Buffer
+            enc := gob.NewEncoder(&output)
+            err := enc.Encode(RawFile{"test"})
+            if err != nil {
+                panic("error: Encoder")
             }
 
-            output := make([]byte, serialized_fileheader.Cap())
-            copy(output, serialized_fileheader.Bytes())
-
-            file_hdr, _ := func (p []byte) (*RawFile, error) {
-                output := RawFile{}
-
-                serialized_buf := bytes.NewBuffer(p)
-
-                d := gob.NewDecoder(serialized_buf)
-                err := d.Decode(&output)
-                if err != nil && err != io.EOF {
-                    return nil, err
-                }
-
-                return &output, nil
-            } (serialized_fileheader.Bytes())
-            out(file_hdr.Name)
-
-            commit_ch <- output
+            commit_ch <- output.Bytes()
         }(&channel_header)
     }
 
@@ -585,22 +562,6 @@ func (f *FSHeader) UnmountDB() error {
     /* serialized RawFile metadata includes the gzip'd file data, if necessary */
     for total_files != 0 {
         var meta_raw = <- commit_ch
-
-        file_hdr, _ := func (p []byte) (*RawFile, error) {
-            output := &RawFile{}
-
-            serialized_buf := bytes.NewBuffer(p)
-
-            d := gob.NewDecoder(serialized_buf)
-            err := d.Decode(output)
-            if err != nil && err != io.EOF {
-                return nil, err
-            }
-
-            return output, nil
-        } (meta_raw)
-
-        out(file_hdr.Name)
 
         stream.Write(meta_raw)
 
