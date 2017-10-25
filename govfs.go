@@ -25,6 +25,7 @@ package govfs
 // TODO
 // create() can either create a folder or a file.
 // When a folder/file is created, make all subdirectories in the map as well
+// https://golang.org/src/encoding/gob/example_test.go
 
 /* TEST5
  * Supports:
