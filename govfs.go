@@ -506,9 +506,7 @@ func (f *FSHeader) UnmountDB(flags int /* FLAG_COMPRESS_FILES */) error {
             UnzippedLen: 0,
         }
 
-        //channel_header.raw.GZIPData = bytes.Buffer{}
-
-       go func (d *comp_data) {
+        go func (d *comp_data) {
             if d.file.filename == "/" {
                 return
             }
