@@ -258,10 +258,11 @@ func TestFSWriter(t *testing.T) {
     /*
      * Unmount/commit database to file
      */
-    if err := header.UnmountDB(); err != nil {
+    if err := header.UnmountDB(0 /*FLAG_COMPRESS_FILES*/); err != nil {
         drive_fail("TEST16: Failed to commit database", t)
     }
     out("[+] Test 16 PASS. Raw FS stream written to: " + header.filename)
+    out("Total File Content Size: " + string(header.get_total_filesizes()))
 
     time.Sleep(10000)
 }
@@ -287,6 +288,35 @@ func TestFSReader(t *testing.T) {
         drive_fail("TEST1.1: Failed to start IOController", t)
     }
     out("[+] Test 1 PASS (Loaded FS stream)")
+
+    /*
+     * Tests the Writer interface
+     */
+    if file, err := header.Create("/NewestFolder/Subdirectory/GoodBoy.bin"); file == nil || err != nil {
+        drive_fail("TEST2.1: folder file5 cannot be created", t)
+    }
+
+    file0data := []byte("whattttttt")
+    writer, err := header.NewWriter("/NewestFolder/Subdirectory/GoodBoy.bin")
+    if writer == nil || err != nil {
+        drive_fail("TEST2.2: Invalid Writer object", t)
+    }
+
+    written, err := writer.Write(file0data)
+    if written != len(file0data) || err != io.EOF {
+        drive_fail("TEST2.3: Invalid Writer response", t)
+    }
+    out("[+] Test 2 PASS")
+
+    /*
+     * Print out files
+     */
+    file_list := header.get_file_list()
+    for _, e := range file_list {
+        out(e)
+    }
+
+    out("Total File Content Size: " + string(header.get_total_filesizes()))
 }
 
 func gen_raw_filename(suffix string) string {
