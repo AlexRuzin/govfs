@@ -71,6 +71,7 @@ const FLAG_COMPRESS             int = 4 /* Compression on the fs serialized outp
 const FLAG_ENCRYPT              int = 8 /* Encryption on the fs serialized output */
 const FLAG_DB_LOAD              int = 16 /* Loads the database */
 const FLAG_DB_CREATE            int = 32 /* Creates the database */
+const FLAG_COMPRESS_FILES       int = 64 /* Compresses files in the FS stream */
 
 type FSHeader struct {
     filename    string
@@ -117,7 +118,6 @@ type RawFile /* Export required for gob serializer */ struct {
     RawSum string
     Flags int
     Name string
-    Compressed []byte
     UnzippedLen int
 }
 
@@ -154,6 +154,7 @@ func CreateDatabase(name string, flags int) (*FSHeader, error) {
         /* Generate the standard "/" file */
         header.meta[s("/")] = new(gofs_file)
         header.meta[s("/")].filename = "/"
+        header.t_size = 0
     }
 
     if header == nil {
@@ -488,7 +489,7 @@ func (f *FSHeader) write_internal(d *gofs_file, data []byte) int {
     return datalen
 }
 
-func (f *FSHeader) UnmountDB() error {
+func (f *FSHeader) UnmountDB(flags int /* FLAG_COMPRESS_FILES */) error {
     type comp_data struct {
         file *gofs_file
         raw RawFile
@@ -512,26 +513,36 @@ func (f *FSHeader) UnmountDB() error {
                 return
             }
 
+            var data_stream []byte
             if (d.file.flags & FLAG_FILE) > 0 && len(d.file.data) > 0 {
                 d.raw.UnzippedLen = len(d.file.data)
 
-                var zip_buf = bytes.NewBuffer(nil)
-                gzip_writer := gzip.NewWriter(zip_buf)
-                gzip_writer.Write(d.file.data)
+                if (flags & FLAG_COMPRESS_FILES) > 0 {
+                    d.raw.Flags |= FLAG_COMPRESS_FILES
 
-                gzipped := bytes.Buffer{}
-                gzipped.ReadFrom(zip_buf)
+                    var zip_buf= bytes.NewBuffer(nil)
+                    gzip_writer := gzip.NewWriter(zip_buf)
+                    gzip_writer.Write(d.file.data)
 
-                d.raw.Compressed = make([]byte, gzipped.Len())
-                copy(d.raw.Compressed, gzipped.Bytes())
-                gzip_writer.Close()
-            } else {
-                d.raw.Compressed = nil
+                    gzipped := bytes.Buffer{}
+                    gzipped.ReadFrom(zip_buf)
+
+                    data_stream = make([]byte, gzipped.Len())
+                    copy(data_stream, gzipped.Bytes())
+                    gzip_writer.Close()
+                } else {
+                    data_stream = make([]byte, d.raw.UnzippedLen)
+                    copy(data_stream, d.file.data)
+                }
             }
 
             var output = bytes.Buffer{}
             enc := gob.NewEncoder(&output)
             enc.Encode(d.raw)
+
+            if len(data_stream) > 0 {
+                output.Write(data_stream)
+            }
 
             commit_ch <- output
         }(&channel_header)
@@ -612,6 +623,10 @@ func load_header(data []byte, filename string) (*FSHeader, error) {
 
     /* Enumerate files */
     for {
+        if ptr.Len() == 0 {
+            break
+        }
+
         file_hdr, err := func (p *bytes.Buffer) (*RawFile, error) {
             output := &RawFile{}
 
@@ -640,20 +655,38 @@ func load_header(data []byte, filename string) (*FSHeader, error) {
         }
 
         //output.meta[s(file_hdr.Name)].data = make([]byte, decompressed_len)
-        if file_hdr.Compressed != nil {
+        if file_hdr.UnzippedLen > 0 {
             output.meta[s(file_hdr.Name)].datasum = file_hdr.RawSum
-            output.meta[s(file_hdr.Name)].data = make([]byte, file_hdr.UnzippedLen)
 
-            zipped := bytes.NewBuffer(file_hdr.Compressed)
-            gzip, err := gzip.NewReader(zipped)
-            if err != nil {
-                return nil, err
+            var raw_file_data = make([]byte, file_hdr.UnzippedLen)
+            ptr.Read(raw_file_data)
+
+            if (file_hdr.Flags & FLAG_COMPRESS_FILES) > 0 {
+                var data_ptr *[]byte = &output.meta[s(file_hdr.Name)].data
+                *data_ptr = make([]byte, file_hdr.UnzippedLen)
+
+                zipped := bytes.NewBuffer(raw_file_data)
+                gzip, err := gzip.NewReader(zipped)
+                if err != nil {
+                    gzip.Close()
+                    return nil, err
+                }
+
+                gzip.Close()
+                decompressed_len, err := gzip.Read(*data_ptr)
+                if decompressed_len != file_hdr.UnzippedLen || err != nil {
+                    return nil, err
+                }
+                output.t_size += uint(decompressed_len)
+            } else {
+                output.meta[s(file_hdr.Name)].data = make([]byte, file_hdr.UnzippedLen)
+                copy(output.meta[s(file_hdr.Name)].data, raw_file_data)
+                output.t_size += uint(file_hdr.UnzippedLen)
             }
 
-
-            decompressed_len, err := gzip.Read(output.meta[s(file_hdr.Name)].data)
-            if decompressed_len != file_hdr.UnzippedLen || err != nil {
-                return nil, err
+            /* Verifiy sums */
+            if sum := s(string(output.meta[s(file_hdr.Name)].data)); sum != output.meta[s(file_hdr.Name)].datasum {
+                return nil, errors.New("error: Invalid file sum")
             }
         }
     }
