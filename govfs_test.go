@@ -30,9 +30,46 @@ import (
     _"bytes"
     "bytes"
     "runtime"
+    "encoding/gob"
 )
 
 const FS_DATABASE_FILE string = "test_db"
+
+func TestGobSerializer(t *testing.T) {
+    type st struct {
+        val1 string
+        val2 int
+        val3 []byte
+    }
+
+    input := st{
+        val1: "test1",
+        val2: 4343,
+    }
+    input.val3 = make([]byte, 4)
+    input.val3 = []byte{1, 2, 3, 4 }
+
+    serialized_fileheader := func (p st) *bytes.Buffer {
+        b := bytes.Buffer{}
+        e := gob.NewEncoder(&b)
+        e.Encode(p)
+        return &b
+    } (input) /* Pass in RawFile */
+
+    output, _ := func (p *bytes.Buffer) (*st, error) {
+        output := &st{}
+
+        d := gob.NewDecoder(p)
+        err := d.Decode(output)
+        if err != nil && err != io.EOF {
+            return nil, err
+        }
+
+        return output, nil
+    } (serialized_fileheader)
+
+    out(output.val1)
+}
 
 func TestFSWriter(t *testing.T) {
     /*

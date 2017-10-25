@@ -49,6 +49,7 @@ import (
     "io/ioutil"
     _"time"
     _"golang.org/x/crypto/ssh/test"
+    _"time"
 )
 
 /*
@@ -56,7 +57,8 @@ import (
  */
 const MAX_FILENAME_LENGTH       int = 256
 const FS_SIGNATURE              string = "govfs_header" /* Cannot exceed 64 */
-const STREAM_PAD_LEN            int = 1024 /* Length of the pad between two serialized RawFile structs */
+const STREAM_PAD_LEN            int = 0 /* Length of the pad between two serialized RawFile structs */
+const REMOVE_FS_HEADER          bool = true /* Removes the header at the beginning of the serialized file */
 
 const IRP_PURGE                 int = 2 /* Flush the entire database and all files */
 const IRP_DELETE                int = 3 /* Delete a file/folder */
@@ -502,7 +504,7 @@ func (f *FSHeader) UnmountDB() error {
         }
         channel_header.raw.GZIPData = bytes.Buffer{}
 
-        go func (d *comp_data) {
+        func (d *comp_data) {
             if d.file.filename == "/" {
                 return
             }
@@ -530,12 +532,26 @@ func (f *FSHeader) UnmountDB() error {
                 serialized_fileheader.WriteByte(0)
             }
 
-            output := make([]byte, serialized_fileheader.Len())
+            output := make([]byte, serialized_fileheader.Cap())
             copy(output, serialized_fileheader.Bytes())
+
+            file_hdr, _ := func (p []byte) (*RawFile, error) {
+                output := RawFile{}
+
+                serialized_buf := bytes.NewBuffer(p)
+
+                d := gob.NewDecoder(serialized_buf)
+                err := d.Decode(&output)
+                if err != nil && err != io.EOF {
+                    return nil, err
+                }
+
+                return &output, nil
+            } (serialized_fileheader.Bytes())
+            out(file_hdr.Name)
 
             commit_ch <- output
         }(&channel_header)
-        //time.Sleep(0)
     }
 
     /* Do not count "/" as a file, since it is not sent in channel */
@@ -549,19 +565,41 @@ func (f *FSHeader) UnmountDB() error {
         FileCount:  total_files }
 
     /* Serializer for fs_header */
-    stream := func (hdr raw_stream_hdr) *bytes.Buffer {
-        b := new(bytes.Buffer)
-        e := gob.NewEncoder(b)
-        if err := e.Encode(hdr); err != nil {
-            return nil /* Failure in encoding the fs_header structure -- Should not happen */
-        }
+    var stream *bytes.Buffer
 
-        return b
-    } (hdr)
+    if REMOVE_FS_HEADER != true {
+        stream = func(hdr raw_stream_hdr) *bytes.Buffer {
+            b := new(bytes.Buffer)
+            e := gob.NewEncoder(b)
+            if err := e.Encode(hdr); err != nil {
+                return nil /* Failure in encoding the fs_header structure -- Should not happen */
+            }
+
+            return b
+        }(hdr)
+    } else {
+        stream = new(bytes.Buffer)
+    }
 
     /* serialized RawFile metadata includes the gzip'd file data, if necessary */
     for total_files != 0 {
         var meta_raw = <- commit_ch
+
+        file_hdr, _ := func (p []byte) (*RawFile, error) {
+            output := &RawFile{}
+
+            serialized_buf := bytes.NewBuffer(p)
+
+            d := gob.NewDecoder(serialized_buf)
+            err := d.Decode(output)
+            if err != nil && err != io.EOF {
+                return nil, err
+            }
+
+            return output, nil
+        } (meta_raw)
+
+        out(file_hdr.Name)
 
         stream.Write(meta_raw)
 
@@ -580,22 +618,24 @@ func (f *FSHeader) UnmountDB() error {
 }
 
 func load_header(data []byte, filename string) (*FSHeader, error) {
-    /* Parse the file header */
-    ptr := bytes.NewBuffer(data)
-    header, err := func (p *bytes.Buffer) (*raw_stream_hdr, error) {
-        output := new(raw_stream_hdr)
+    ptr := bytes.NewBuffer(data) /* raw file stream */
 
-        d := gob.NewDecoder(p)
-        err := d.Decode(output)
-        if err != nil {
+    if REMOVE_FS_HEADER != true {
+        header, err := func(p *bytes.Buffer) (*raw_stream_hdr, error) {
+            output := new(raw_stream_hdr)
+
+            d := gob.NewDecoder(p)
+            err := d.Decode(output)
+            if err != nil {
+                return nil, err
+            }
+
+            return output, nil
+        }(ptr)
+
+        if err != nil || header == nil || header.Signature != FS_SIGNATURE {
             return nil, err
         }
-
-        return output, nil
-    } (ptr)
-
-    if err != nil || header == nil || header.Signature != FS_SIGNATURE {
-        return nil, err
     }
 
     output := &FSHeader{
