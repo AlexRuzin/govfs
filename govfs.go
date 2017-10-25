@@ -50,7 +50,6 @@ import (
     "io/ioutil"
     _"time"
     _"golang.org/x/crypto/ssh/test"
-    _"time"
 )
 
 /*
@@ -118,7 +117,6 @@ type RawFile /* Export required for gob serializer */ struct {
     RawSum string
     Flags int
     Name string
-    GZIPData bytes.Buffer
 }
 
 /*
@@ -494,7 +492,7 @@ func (f *FSHeader) UnmountDB() error {
         raw RawFile
     }
 
-    commit_ch := make(chan []byte)
+    commit_ch := make(chan bytes.Buffer)
     for k := range f.meta {
         var channel_header comp_data
         channel_header.file = f.meta[k]
@@ -503,15 +501,16 @@ func (f *FSHeader) UnmountDB() error {
             RawSum: f.meta[k].datasum,
             Name: f.meta[k].filename,
         }
-        channel_header.raw.GZIPData = bytes.Buffer{}
 
-        go func (d *comp_data) {
+        //channel_header.raw.GZIPData = bytes.Buffer{}
+
+       go func (d *comp_data) {
             if d.file.filename == "/" {
                 return
             }
 
-            if (d.file.flags & FLAG_FILE) > 0 /* File */ && len(d.file.data) > 0 {
-                /* Compression required since this is a file, and it's length is > 0 */
+            /*
+            if (d.file.flags & FLAG_FILE) > 0 && len(d.file.data) > 0 {
 
                 var zip_buf = bytes.NewBuffer(nil)
                 gzip_writer := gzip.NewWriter(zip_buf)
@@ -520,15 +519,13 @@ func (f *FSHeader) UnmountDB() error {
                 d.raw.GZIPData = bytes.Buffer{}
                 d.raw.GZIPData.ReadFrom(zip_buf)
             }
+            */
 
-            var output bytes.Buffer
+            var output = bytes.Buffer{}
             enc := gob.NewEncoder(&output)
-            err := enc.Encode(RawFile{"test"})
-            if err != nil {
-                panic("error: Encoder")
-            }
+            enc.Encode(d.raw)
 
-            commit_ch <- output.Bytes()
+            commit_ch <- output
         }(&channel_header)
     }
 
@@ -562,9 +559,7 @@ func (f *FSHeader) UnmountDB() error {
     /* serialized RawFile metadata includes the gzip'd file data, if necessary */
     for total_files != 0 {
         var meta_raw = <- commit_ch
-
-        stream.Write(meta_raw)
-
+        stream.Write(meta_raw.Bytes())
         total_files -= 1
     }
 
@@ -636,6 +631,7 @@ func load_header(data []byte, filename string) (*FSHeader, error) {
             datasum: "",
         }
 
+        /*
         if file_hdr.GZIPData.Len() > 0 {
             output.meta[s(file_hdr.Name)].datasum = file_hdr.RawSum
             r, err := gzip.NewReader(ptr)
@@ -647,6 +643,7 @@ func load_header(data []byte, filename string) (*FSHeader, error) {
             r.Read(decompressed)
             output.meta[s(file_hdr.Name)].data = decompressed
         }
+        */
     }
 
     return output, nil
