@@ -27,7 +27,6 @@ import (
     "time"
     "os"
     "io"
-    _"bytes"
     "bytes"
     "runtime"
 )
