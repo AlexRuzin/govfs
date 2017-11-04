@@ -177,7 +177,7 @@ func (f *FSHeader) StartIOController() error {
             switch io.operation {
             case IRP_PURGE:
                 /* PURGE */
-                out("ERROR: PURGING")
+                io.status = errors.New("Purge command issued")
                 close(header.io_in)
                 return
             case IRP_DELETE:
