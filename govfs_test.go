@@ -29,6 +29,7 @@ import (
     "io"
     "bytes"
     "runtime"
+    "github.com/AlexRuzin/util"
 )
 
 const FS_DATABASE_FILE string = "test_db"
@@ -39,7 +40,7 @@ func TestFSWriter(t *testing.T) {
      * This test will generate the raw fs stream file, along with some contents
      *  that will be later loaded by the TestFSReader() method
      */
-    out("[+] Running Standard I/O Sanity Test...")
+    util.DebugOut("[+] Running Standard I/O Sanity Test...")
 
     /* Remove the test database if it exists */
     var filename = gen_raw_filename(FS_DATABASE_FILE)
@@ -54,13 +55,13 @@ func TestFSWriter(t *testing.T) {
     if err := header.StartIOController(); err != nil {
         drive_fail("TEST1.1: Failed to start IOController", t)
     }
-    out("[+] Test 1 PASS")
+    util.DebugOut("[+] Test 1 PASS")
     
     // The root file "/" must at least exist
     if file, err := header.Create("/"); file != nil && err == nil {
         drive_fail("TEST2: Failed to return root handle", t)
     }
-    out("[+] Test 2 PASS")
+    util.DebugOut("[+] Test 2 PASS")
     
     /*
      * Try to delete the root file "/"
@@ -68,7 +69,7 @@ func TestFSWriter(t *testing.T) {
     if header.Delete("/") == nil {
         drive_fail("TEST3: Cannot delete root -- critical", t)
     }
-    out("[+] Test 3 PASS")
+    util.DebugOut("[+] Test 3 PASS")
 
     /*
      * Attempt to write to a nonexistant file
@@ -77,7 +78,7 @@ func TestFSWriter(t *testing.T) {
     if header.Write("/folder5/folder5/file5", data) == nil {
         drive_fail("TEST4: Cannot write to a nonexistant file", t)
     }
-    out("[+] Test 4 PASS")
+    util.DebugOut("[+] Test 4 PASS")
 
     /*
      * Create empty file file9
@@ -85,7 +86,7 @@ func TestFSWriter(t *testing.T) {
     if file, err := header.Create("/folder5/folder4/folder2/file9"); file == nil || err != nil {
         drive_fail("TEST4.1: file9 cannot be created", t)
     }
-    out("[+] Test 4.1 PASS")
+    util.DebugOut("[+] Test 4.1 PASS")
 
     /*
      * Attempt to create a new file0
@@ -93,7 +94,7 @@ func TestFSWriter(t *testing.T) {
     if file, err := header.Create("/folder0/folder0/file0"); file == nil || err != nil {
         drive_fail("TEST5.0: file0 cannot be created", t)
     }
-    out("[+] Test 5.0 PASS")
+    util.DebugOut("[+] Test 5.0 PASS")
 
     /*
      * Attempt to create a new file0, this will fail since it should already exist
@@ -101,7 +102,7 @@ func TestFSWriter(t *testing.T) {
     if file, err := header.Create("/folder0/folder0/file0"); file != nil && err == nil {
         drive_fail("TEST5.1: file0 cannot be created twice", t)
     }
-    out("[+] Test 5.1 PASS")
+    util.DebugOut("[+] Test 5.1 PASS")
 
     
     /*
@@ -111,7 +112,7 @@ func TestFSWriter(t *testing.T) {
     if header.Write("/folder0/folder0/file0", data) != nil {
         drive_fail("TEST6: Failed to write data in file0", t)
     }
-    out("[+] Test 6 PASS")
+    util.DebugOut("[+] Test 6 PASS")
 
     /*
      * Check that the size of file0 is 4
@@ -119,7 +120,7 @@ func TestFSWriter(t *testing.T) {
     if k, _ := header.get_file_size("/folder0/folder0/file0"); k != uint(len(data)) {
         drive_fail("TEST6.1: The size of data does not match", t)
     }
-    out("[+] Test 6.1 PASS")
+    util.DebugOut("[+] Test 6.1 PASS")
     
     /*
      * Attempt to create a new file3
@@ -127,7 +128,7 @@ func TestFSWriter(t *testing.T) {
     if file, err := header.Create("/folder1/folder0/file3"); file == nil || err != nil {
         drive_fail("TEST7: file3 cannot be created", t)
     }
-    out("[+] Test 7 PASS")
+    util.DebugOut("[+] Test 7 PASS")
     
     /*
      * Write some data into file3
@@ -136,7 +137,7 @@ func TestFSWriter(t *testing.T) {
     if header.Write("/folder1/folder0/file3", data2) != nil {
         drive_fail("TEST8: Failed to write data in file3", t)
     }
-    out("[+] Test 8 PASS")
+    util.DebugOut("[+] Test 8 PASS")
 
     /*
      * Write some data into file3
@@ -144,7 +145,7 @@ func TestFSWriter(t *testing.T) {
     if header.Write("/folder1/folder0/file3", data2) != nil {
         drive_fail("TEST8.1: Failed to write data in file3", t)
     }
-    out("[+] Test 8.1 PASS")
+    util.DebugOut("[+] Test 8.1 PASS")
     
     /*
      * Read the written data from file0 and compare
@@ -153,7 +154,7 @@ func TestFSWriter(t *testing.T) {
     if output_data == nil || len(output_data) != len(data) || header.t_size - 7 /* len(file3) */ != uint(len(data)) {
         drive_fail("TEST9: Failed to read data from file0", t)
     }
-    out("[+] Test 9 PASS")
+    util.DebugOut("[+] Test 9 PASS")
     
     /*
      * Read the written data from file3 and compare
@@ -162,7 +163,7 @@ func TestFSWriter(t *testing.T) {
     if output_data == nil || len(output_data) != len(data2) || header.t_size - 4 /* len(file0) */ != uint(len(data2)) {
         drive_fail("TEST10: Failed to read data from file3", t)
     }
-    out("[+] Test 10 PASS")
+    util.DebugOut("[+] Test 10 PASS")
     
     /*
      * Write other data to file0
@@ -171,7 +172,7 @@ func TestFSWriter(t *testing.T) {
     if header.Write("/folder0/folder0/file0", data) != nil {
         drive_fail("TEST11: Failed to write data in file1", t)
     }   
-    out("[+] Test 11 PASS")
+    util.DebugOut("[+] Test 11 PASS")
     
     /*
      * Read the new data from file0
@@ -180,7 +181,7 @@ func TestFSWriter(t *testing.T) {
     if output_data == nil || len(output_data) != len(data) {
         drive_fail("TEST12: Failed to read data from file1", t)
     }
-    out("[+] Test 12 PASS")
+    util.DebugOut("[+] Test 12 PASS")
 
     /*
      * Attempt to create a new file5. This will be a blank file
@@ -188,7 +189,7 @@ func TestFSWriter(t *testing.T) {
     if file, err := header.Create("/folder2/file7"); file == nil || err != nil {
         drive_fail("TEST13: file3 cannot be created", t)
     }
-    out("[+] Test 13 PASS")
+    util.DebugOut("[+] Test 13 PASS")
     
     /*
      * Delete file0 -- complete this
@@ -201,7 +202,7 @@ func TestFSWriter(t *testing.T) {
     if file, err := header.Create("/folder2/file5/"); file == nil || err != nil {
         drive_fail("TEST15: folder file5 cannot be created", t)
     }
-    out("[+] Test 15 PASS")
+    util.DebugOut("[+] Test 15 PASS")
 
     /*
      * Tests the Reader interface
@@ -223,7 +224,7 @@ func TestFSWriter(t *testing.T) {
     if data_read != 1 || err != nil || file0data[0] != 1 {
         drive_fail("TEST15.3: Invalid Reader interface behaviour", t)
     }
-    out("[+] Test 15.1, 15.2, 15.3 PASS -- Reader interface")
+    util.DebugOut("[+] Test 15.1, 15.2, 15.3 PASS -- Reader interface")
 
     /*
      * Tests the Writer interface
@@ -244,14 +245,14 @@ func TestFSWriter(t *testing.T) {
     if data_read != 8 || err != io.EOF || file0data[0] != 1 || file0data[1] != 2 {
         drive_fail("TEST15.5: Invalid Reader data",t )
     }
-    out("[+] Test 15.4, 15.5 PASS -- Writer interface")
+    util.DebugOut("[+] Test 15.4, 15.5 PASS -- Writer interface")
 
     /*
      * Print out files
      */
     file_list := header.get_file_list()
     for _, e := range file_list {
-        out(e)
+        util.DebugOut(e)
     }
 
     /*
@@ -260,8 +261,8 @@ func TestFSWriter(t *testing.T) {
     if err := header.UnmountDB(0 /*FLAG_COMPRESS_FILES*/); err != nil {
         drive_fail("TEST16: Failed to commit database", t)
     }
-    out("[+] Test 16 PASS. Raw FS stream written to: " + header.filename)
-    out("Total File Content Size: " + string(header.get_total_filesizes()))
+    util.DebugOut("[+] Test 16 PASS. Raw FS stream written to: " + header.filename)
+    util.DebugOut("Total File Content Size: " + string(header.get_total_filesizes()))
 
     time.Sleep(10000)
 }
@@ -271,7 +272,7 @@ func TestFSReader(t *testing.T) {
      * Read in FS_DATABASE_FILE and do basic tests
      */
     var filename = gen_raw_filename(FS_DATABASE_FILE)
-    out("[+] Loading Raw FS stream file: " + filename)
+    util.DebugOut("[+] Loading Raw FS stream file: " + filename)
 
     /* Remove the test database if it exists */
     if _, err := os.Stat(filename); os.IsNotExist(err) {
@@ -286,7 +287,7 @@ func TestFSReader(t *testing.T) {
     if err := header.StartIOController(); err != nil {
         drive_fail("TEST1.1: Failed to start IOController", t)
     }
-    out("[+] Test 1 PASS (Loaded FS stream)")
+    util.DebugOut("[+] Test 1 PASS (Loaded FS stream)")
 
     /*
      * Tests the Writer interface
@@ -305,17 +306,17 @@ func TestFSReader(t *testing.T) {
     if written != len(file0data) || err != io.EOF {
         drive_fail("TEST2.3: Invalid Writer response", t)
     }
-    out("[+] Test 2 PASS")
+    util.DebugOut("[+] Test 2 PASS")
 
     /*
      * Print out files
      */
     file_list := header.get_file_list()
     for _, e := range file_list {
-        out(e)
+        util.DebugOut(e)
     }
 
-    out("Total File Content Size: " + string(header.get_total_filesizes()))
+    util.DebugOut("Total File Content Size: " + string(header.get_total_filesizes()))
 }
 
 func gen_raw_filename(suffix string) string {
