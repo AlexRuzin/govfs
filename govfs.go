@@ -172,56 +172,56 @@ func (f *FSHeader) StartIOController() error {
     header.io_in = make(chan *gofs_io_block)
     go func (f *FSHeader) {
         for {
-            var io = <- header.io_in
+            var ioh = <- header.io_in
 
-            switch io.operation {
+            switch ioh.operation {
             case IRP_PURGE:
                 /* PURGE */
-                io.status = errors.New("Purge command issued")
+                ioh.status = errors.New("Purge command issued")
                 close(header.io_in)
                 return
             case IRP_DELETE:
                 /* DELETE */
                 // FIXME/ADDME
-                io.status = errors.New("IRP_DELETE generic error")
-                if io.file.filename == "/" { /* Cannot delete the root file */
-                    io.status = errors.New("IRP_DELETE: Tried to delete the root file")
-                    io.io_out <- io
+                ioh.status = errors.New("IRP_DELETE generic error")
+                if ioh.file.filename == "/" { /* Cannot delete the root file */
+                    ioh.status = errors.New("IRP_DELETE: Tried to delete the root file")
+                    ioh.io_out <- ioh
                 } else {
-                    if i := f.check(io.name); i != nil {
-                        delete(f.meta, s(io.name))
-                        f.meta[s(io.name)] = nil
-                        io.status = nil
+                    if i := f.check(ioh.name); i != nil {
+                        delete(f.meta, s(ioh.name))
+                        f.meta[s(ioh.name)] = nil
+                        ioh.status = nil
                     }
-                    io.io_out <- io
+                    ioh.io_out <- ioh
                 }
             case IRP_WRITE:
                 /* WRITE */
-                if i := f.check(io.name); i != nil {
-                    io.file.lock.Lock()
-                    if f.write_internal(i, io.data) == len(io.data) {
-                        io.status = nil
-                        io.file.lock.Unlock()
-                        io.io_out <- io
+                if i := f.check(ioh.name); i != nil {
+                    ioh.file.lock.Lock()
+                    if f.write_internal(i, ioh.data) == len(ioh.data) {
+                        ioh.status = nil
+                        ioh.file.lock.Unlock()
+                        ioh.io_out <- ioh
                     } else {
-                        io.status = errors.New("IRP_WRITE: Failed to write to filesystem")
-                        io.file.lock.Unlock()
-                        io.io_out <- io
+                        ioh.status = errors.New("IRP_WRITE: Failed to write to filesystem")
+                        ioh.file.lock.Unlock()
+                        ioh.io_out <- ioh
                     }
                 }
             case IRP_CREATE:
-                f.meta[s(io.name)] = new(gofs_file)
-                io.file = f.meta[s(io.name)]
-                io.file.filename = io.name
+                f.meta[s(ioh.name)] = new(gofs_file)
+                ioh.file = f.meta[s(ioh.name)]
+                ioh.file.filename = ioh.name
 
-                if string(io.name[len(io.name) - 1:]) == "/" {
-                    io.file.flags |= FLAG_DIRECTORY
+                if string(ioh.name[len(ioh.name) - 1:]) == "/" {
+                    ioh.file.flags |= FLAG_DIRECTORY
                 } else {
-                    io.file.flags |= FLAG_FILE
+                    ioh.file.flags |= FLAG_FILE
                 }
 
                 /* Recursively create all subdirectory files */
-                sub_strings := strings.Split(io.name, "/")
+                sub_strings := strings.Split(ioh.name, "/")
                 sub_array := make([]string, len(sub_strings) - 2)
                 copy(sub_array, sub_strings[1:len(sub_strings) - 1]) /* We do not need the first/last file */
                 var tmp string = ""
@@ -241,8 +241,8 @@ func (f *FSHeader) StartIOController() error {
                     } (tmp, f)
                 }
 
-                io.status = nil
-                io.io_out <- io
+                ioh.status = nil
+                ioh.io_out <- ioh
             }
         }
     } (header)
@@ -664,14 +664,14 @@ func load_header(data []byte, filename string) (*FSHeader, error) {
                 *data_ptr = make([]byte, file_hdr.UnzippedLen)
 
                 zipped := bytes.NewBuffer(raw_file_data)
-                gzip, err := gzip.NewReader(zipped)
+                gzipd, err := gzip.NewReader(zipped)
                 if err != nil {
-                    gzip.Close()
+                    gzipd.Close()
                     return nil, err
                 }
 
-                gzip.Close()
-                decompressed_len, err := gzip.Read(*data_ptr)
+                gzipd.Close()
+                decompressed_len, err := gzipd.Read(*data_ptr)
                 if decompressed_len != file_hdr.UnzippedLen || err != nil {
                     return nil, err
                 }
