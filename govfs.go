@@ -45,7 +45,7 @@ import (
     "sync"
     "strings"
     "errors"
-    "github.com/AlexRuzin/crypto"
+    "github.com/AlexRuzin/cryptog"
     "io"
     "io/ioutil"
     _"time"
