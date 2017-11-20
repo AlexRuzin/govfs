@@ -727,7 +727,7 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
         /* The crypto key is composed of the MD5 of the hostname + the FS_SIGNATURE */
         key := get_fs_key()
 
-        plaintext, err = crypto.RC4_Decrypt(raw_file, &key)
+        plaintext, err = cryptog.RC4_Decrypt(raw_file, &key)
         if err != nil {
             return nil, err
         }
@@ -780,7 +780,7 @@ func (f *FSHeader) write_fs_stream(name string, data *bytes.Buffer, flags int) (
 
         /* Perform RC4 encryption */
         var err error
-        ciphertext, err = crypto.RC4_Encrypt(data.Bytes(), &key)
+        ciphertext, err = cryptog.RC4_Encrypt(data.Bytes(), &key)
         if err != nil {
             return 0, err
         }
