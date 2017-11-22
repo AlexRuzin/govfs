@@ -58,13 +58,14 @@ import (
 const MAX_FILENAME_LENGTH     int = 256
 const FS_SIGNATURE            string = "govfs_header" /* Cannot exceed 64 */
 const STREAM_PAD_LEN          int = 0 /* Length of the pad between two serialized RawFile structs */
-const REMOVE_FS_HEADER        bool = false /* Removes the header at the beginning of the serialized file */
+const REMOVE_FS_HEADER        bool = false /* Removes the header at the beginning of the serialized file - leave false */
 
+const IRP_BASE                int = 2 /* Start the IRP controller ID count from n */
 const (
-    IRP_PURGE                 int = 2 + iota /* Flush the entire database and all files */
-    IRP_DELETE                int = 3 + iota /* Delete a file/folder */
-    IRP_WRITE                 int = 4 + iota/* Write data to a file */
-    IRP_CREATE                int = 5 + iota/* Create a new file or folder */
+    IRP_PURGE                 int = IRP_BASE + iota /* Flush the entire database and all files */
+    IRP_DELETE                int = IRP_BASE + iota /* Delete a file/folder */
+    IRP_WRITE                 int = IRP_BASE + iota/* Write data to a file */
+    IRP_CREATE                int = IRP_BASE + iota/* Create a new file or folder */
 )
 
 const (
