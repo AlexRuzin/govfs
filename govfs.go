@@ -55,23 +55,27 @@ import (
 /*
  * Configurable constants
  */
-const MAX_FILENAME_LENGTH       int = 256
-const FS_SIGNATURE              string = "govfs_header" /* Cannot exceed 64 */
-const STREAM_PAD_LEN            int = 0 /* Length of the pad between two serialized RawFile structs */
-const REMOVE_FS_HEADER          bool = false /* Removes the header at the beginning of the serialized file */
+const MAX_FILENAME_LENGTH     int = 256
+const FS_SIGNATURE            string = "govfs_header" /* Cannot exceed 64 */
+const STREAM_PAD_LEN          int = 0 /* Length of the pad between two serialized RawFile structs */
+const REMOVE_FS_HEADER        bool = false /* Removes the header at the beginning of the serialized file */
 
-const IRP_PURGE                 int = 2 /* Flush the entire database and all files */
-const IRP_DELETE                int = 3 /* Delete a file/folder */
-const IRP_WRITE                 int = 4 /* Write data to a file */
-const IRP_CREATE                int = 5 /* Create a new file or folder */
+const (
+    IRP_PURGE                 int = 2 + iota /* Flush the entire database and all files */
+    IRP_DELETE                int = 3 + iota /* Delete a file/folder */
+    IRP_WRITE                 int = 4 + iota/* Write data to a file */
+    IRP_CREATE                int = 5 + iota/* Create a new file or folder */
+)
 
-const FLAG_FILE                 int = 1
-const FLAG_DIRECTORY            int = 2
-const FLAG_COMPRESS             int = 4 /* Compression on the fs serialized output */
-const FLAG_ENCRYPT              int = 8 /* Encryption on the fs serialized output */
-const FLAG_DB_LOAD              int = 16 /* Loads the database */
-const FLAG_DB_CREATE            int = 32 /* Creates the database */
-const FLAG_COMPRESS_FILES       int = 64 /* Compresses files in the FS stream */
+const (
+    FLAG_FILE                 int = 1 << iota
+    FLAG_DIRECTORY            int = 1 << iota
+    FLAG_COMPRESS             int = 1 << iota /* Compression on the fs serialized output */
+    FLAG_ENCRYPT              int = 1 << iota /* Encryption on the fs serialized output */
+    FLAG_DB_LOAD              int = 1 << iota /* Loads the database */
+    FLAG_DB_CREATE            int = 1 << iota /* Creates the database */
+    FLAG_COMPRESS_FILES       int = 1 << iota /* Compresses files in the FS stream */
+)
 
 type FSHeader struct {
     filename    string
