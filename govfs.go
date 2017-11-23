@@ -44,12 +44,10 @@ import (
     "bytes"
     "sync"
     "strings"
-    "errors"
     "github.com/AlexRuzin/cryptog"
     "io"
     "io/ioutil"
-    _"time"
-    _"golang.org/x/crypto/ssh/test"
+    "github.com/AlexRuzin/util"
 )
 
 /*
@@ -163,7 +161,7 @@ func CreateDatabase(name string, flags int) (*FSHeader, error) {
     }
 
     if header == nil {
-        return nil, errors.New("error: Invalid header. Failed to generate database header")
+        return nil, util.RetErrStr("Invalid header. Failed to generate database header")
     }
 
     header.flags = flags
@@ -182,15 +180,15 @@ func (f *FSHeader) StartIOController() error {
             switch ioh.operation {
             case IRP_PURGE:
                 /* PURGE */
-                ioh.status = errors.New("Purge command issued")
+                ioh.status = util.RetErrStr("Purge command issued")
                 close(header.io_in)
                 return
             case IRP_DELETE:
                 /* DELETE */
                 // FIXME/ADDME
-                ioh.status = errors.New("IRP_DELETE generic error")
+                ioh.status = util.RetErrStr("IRP_DELETE generic error")
                 if ioh.file.filename == "/" { /* Cannot delete the root file */
-                    ioh.status = errors.New("IRP_DELETE: Tried to delete the root file")
+                    ioh.status = util.RetErrStr("IRP_DELETE: Tried to delete the root file")
                     ioh.io_out <- ioh
                 } else {
                     if i := f.check(ioh.name); i != nil {
@@ -209,7 +207,7 @@ func (f *FSHeader) StartIOController() error {
                         ioh.file.lock.Unlock()
                         ioh.io_out <- ioh
                     } else {
-                        ioh.status = errors.New("IRP_WRITE: Failed to write to filesystem")
+                        ioh.status = util.RetErrStr("IRP_WRITE: Failed to write to filesystem")
                         ioh.file.lock.Unlock()
                         ioh.io_out <- ioh
                     }
@@ -316,11 +314,11 @@ func (f *FSHeader) generate_irp(name string, data []byte, irp_type int) *gofs_io
 
 func (f *FSHeader) Create(name string) (*gofs_file, error) {
     if file := f.check(name); file != nil {
-        return nil, errors.New("create: File already exists")
+        return nil, util.RetErrStr("create: File already exists")
     }
 
     if len(name) > MAX_FILENAME_LENGTH {
-        return nil, errors.New("create: File name is too long")
+        return nil, util.RetErrStr("create: File name is too long")
     }
 
     f.create_sync.Lock()
@@ -350,7 +348,7 @@ type Reader struct {
 func (f *FSHeader) NewReader(name string) (*Reader, error) {
     file := f.check(name)
     if file == nil {
-        return nil, errors.New("error: File not found")
+        return nil, util.RetErrStr("File not found")
     }
 
     reader := &Reader{
@@ -392,11 +390,11 @@ func (f *Reader) Read(r []byte) (int, error) {
 func (f *FSHeader) Read(name string) ([]byte, error) {
     var file_header = f.check(name)
     if file_header == nil {
-        return nil, errors.New("read: File does not exist")
+        return nil, util.RetErrStr("read: File does not exist")
     }
 
     if (file_header.flags & FLAG_DIRECTORY) > 0 {
-        return nil, errors.New("read: Cannot read a directory")
+        return nil, util.RetErrStr("read: Cannot read a directory")
     }
 
     output := make([]byte, len(file_header.data))
@@ -407,7 +405,7 @@ func (f *FSHeader) Read(name string) ([]byte, error) {
 func (f *FSHeader) Delete(name string) error {
     irp := f.generate_irp(name, nil, IRP_DELETE)
     if irp == nil {
-        return errors.New("delete: File does not exist") /* ERROR -- File does not exist */
+        return util.RetErrStr("delete: File does not exist") /* ERROR -- File does not exist */
     }
 
     f.io_in <- irp
@@ -429,7 +427,7 @@ type Writer struct {
 func (f *FSHeader) NewWriter(name string) (*Writer, error) {
     file := f.check(name)
     if file == nil {
-        return nil, errors.New("error: File not found")
+        return nil, util.RetErrStr("File not found")
     }
 
     writer := &Writer {
@@ -443,7 +441,7 @@ func (f *FSHeader) NewWriter(name string) (*Writer, error) {
 
 func (f *Writer) Write(p []byte) (int, error) {
     if len(p) < 1 {
-        return 0, errors.New("error: Invalid write stream length")
+        return 0, util.RetErrStr("Invalid write stream length")
     }
 
     if err := f.Hdr.Write(f.Name, p); err != nil {
@@ -455,12 +453,12 @@ func (f *Writer) Write(p []byte) (int, error) {
 
 func (f *FSHeader) Write(name string, d []byte) error {
     if i := f.check(name); i == nil {
-        return errors.New("write: Cannot write to nonexistent file")
+        return util.RetErrStr("write: Cannot write to nonexistent file")
     }
 
     irp := f.generate_irp(name, d, IRP_WRITE)
     if irp == nil {
-        return errors.New("write: Failed to generate IRP_WRITE") /* FAILURE */
+        return util.RetErrStr("write: Failed to generate IRP_WRITE") /* FAILURE */
     }
 
     /*
@@ -590,7 +588,7 @@ func (f *FSHeader) UnmountDB(flags int /* FLAG_COMPRESS_FILES */) error {
     /* Compress, encrypt, and write stream */
     written, err := f.write_fs_stream(f.filename, stream, f.flags)
     if err != nil || int(written) == 0 {
-        return errors.New("error: Failure in writing raw fs stream")
+        return util.RetErrStr("Failure in writing raw fs stream")
     }
 
     return err
@@ -689,7 +687,7 @@ func load_header(data []byte, filename string) (*FSHeader, error) {
 
             /* Verifiy sums */
             if sum := s(string(output.meta[s(file_hdr.Name)].data)); sum != output.meta[s(file_hdr.Name)].datasum {
-                return nil, errors.New("error: Invalid file sum")
+                return nil, util.RetErrStr("Invalid file sum")
             }
         }
     }
@@ -824,7 +822,7 @@ func (f *FSHeader) get_file_count() uint {
 func (f *FSHeader) get_file_size(name string) (uint, error) {
     file := f.check(name)
     if file == nil {
-        return 0, errors.New("get_file_size: File does not exist")
+        return 0, util.RetErrStr("get_file_size: File does not exist")
     }
 
     return uint(len(file.data)), nil
