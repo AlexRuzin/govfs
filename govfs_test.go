@@ -117,7 +117,7 @@ func TestFSWriter(t *testing.T) {
     /*
      * Check that the size of file0 is 4
      */
-    if k, _ := header.get_file_size("/folder0/folder0/file0"); k != uint(len(data)) {
+    if k, _ := header.GetFileSize("/folder0/folder0/file0"); k != uint(len(data)) {
         drive_fail("TEST6.1: The size of data does not match", t)
     }
     util.DebugOut("[+] Test 6.1 PASS")
@@ -250,7 +250,7 @@ func TestFSWriter(t *testing.T) {
     /*
      * Print out files
      */
-    file_list := header.get_file_list()
+    file_list := header.GetFileList()
     for _, e := range file_list {
         util.DebugOut(e)
     }
@@ -262,7 +262,7 @@ func TestFSWriter(t *testing.T) {
         drive_fail("TEST16: Failed to commit database", t)
     }
     util.DebugOut("[+] Test 16 PASS. Raw FS stream written to: " + header.filename)
-    util.DebugOut("Total File Content Size: " + string(header.get_total_filesizes()))
+    util.DebugOut("Total File Content Size: " + string(header.GetTotalFilesizes()))
 
     time.Sleep(10000)
 }
@@ -311,12 +311,12 @@ func TestFSReader(t *testing.T) {
     /*
      * Print out files
      */
-    file_list := header.get_file_list()
+    file_list := header.GetFileList()
     for _, e := range file_list {
         util.DebugOut(e)
     }
 
-    util.DebugOut("Total File Content Size: " + string(header.get_total_filesizes()))
+    util.DebugOut("Total File Content Size: " + string(header.GetTotalFilesizes()))
 }
 
 func gen_raw_filename(suffix string) string {

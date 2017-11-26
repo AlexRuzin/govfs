@@ -79,14 +79,14 @@ const (
 type FSHeader struct {
     filename    string
     key         [16]byte
-    meta        map[string]*gofs_file
+    meta        map[string]*govfsFile
     t_size      uint /* Total size of all files */
-    io_in       chan *gofs_io_block
+    io_in       chan *govfsIoBlock
     create_sync sync.Mutex
     flags       int /* Generic flags as passed in by CreateDatabase() */
 }
 
-type gofs_file struct {
+type govfsFile struct {
     filename    string
     flags       int /* FLAG_FILE, FLAG_DIRECTORY */
     datasum     string
@@ -94,28 +94,28 @@ type gofs_file struct {
     lock        sync.Mutex
 }
 
-type gofs_io_block struct {
-    file        *gofs_file
+type govfsIoBlock struct {
+    file        *govfsFile
     name        string
     data        []byte
     status      error
     operation   int /* 2 == purge, 3 == delete, 4 == write */
     flags       int
-    io_out      chan *gofs_io_block
+    io_out      chan *govfsIoBlock
 }
 
 /*
  * Header which indicates the beginning of the raw filesystem file, written
  *  to the disk.
  */
-type raw_stream_hdr struct {
+type rawStreamHeader struct {
     Signature string /* Uppercase so that it's "exported" i.e. visibile to the encoder */
     FileCount uint
 }
 
 /*
  * The meta header for each raw file
- *  (gofs_file is the virtual, in-memory file header)
+ *  (govfsFile is the virtual, in-memory file header)
  */
 type RawFile /* Export required for gob serializer */ struct {
     RawSum string
@@ -136,11 +136,11 @@ func CreateDatabase(name string, flags int) (*FSHeader, error) {
     if (flags & FLAG_DB_LOAD) > 0 {
         /* Check if the file exists */
         if _, err := os.Stat(name); !os.IsNotExist(err) {
-            raw, err := read_fs_stream(name, flags)
+            raw, err := readFsStream(name, flags)
             if raw == nil || err != nil {
                 return nil, err
             }
-            header, err = load_header(raw, name)
+            header, err = loadHeader(raw, name)
             if header == nil || err != nil {
                 return nil, err
             }
@@ -151,11 +151,11 @@ func CreateDatabase(name string, flags int) (*FSHeader, error) {
         /* Either the raw fs does not exist, or it is invalid -- create new */
         header = &FSHeader{
             filename: name,
-            meta:     make(map[string]*gofs_file),
+            meta:     make(map[string]*govfsFile),
         }
 
         /* Generate the standard "/" file */
-        header.meta[s("/")] = new(gofs_file)
+        header.meta[s("/")] = new(govfsFile)
         header.meta[s("/")].filename = "/"
         header.t_size = 0
     }
@@ -172,7 +172,7 @@ func (f *FSHeader) StartIOController() error {
     var header *FSHeader = f
 
     /* i/o channel processor. Performs i/o to the filesystem */
-    header.io_in = make(chan *gofs_io_block)
+    header.io_in = make(chan *govfsIoBlock)
     go func (f *FSHeader) {
         for {
             var ioh = <- header.io_in
@@ -202,7 +202,7 @@ func (f *FSHeader) StartIOController() error {
                 /* WRITE */
                 if i := f.check(ioh.name); i != nil {
                     ioh.file.lock.Lock()
-                    if f.write_internal(i, ioh.data) == len(ioh.data) {
+                    if f.writeInternal(i, ioh.data) == len(ioh.data) {
                         ioh.status = nil
                         ioh.file.lock.Unlock()
                         ioh.io_out <- ioh
@@ -213,7 +213,7 @@ func (f *FSHeader) StartIOController() error {
                     }
                 }
             case IRP_CREATE:
-                f.meta[s(ioh.name)] = new(gofs_file)
+                f.meta[s(ioh.name)] = new(govfsFile)
                 ioh.file = f.meta[s(ioh.name)]
                 ioh.file.filename = ioh.name
 
@@ -238,7 +238,7 @@ func (f *FSHeader) StartIOController() error {
                                        as long as one is a directory and the other is a file */
                         }
 
-                        f.meta[s(tmp)] = new(gofs_file)
+                        f.meta[s(tmp)] = new(govfsFile)
                         f.meta[s(tmp)].filename = sub_directory + "/" /* Explicit directory name */
                         f.meta[s(tmp)].flags |= FLAG_DIRECTORY
                     } (tmp, f)
@@ -253,7 +253,7 @@ func (f *FSHeader) StartIOController() error {
     return nil
 }
 
-func (f *FSHeader) check(name string) *gofs_file {
+func (f *FSHeader) check(name string) *govfsFile {
     if sum := s(name); f.meta[sum] != nil {
         return f.meta[sum]
     }
@@ -261,7 +261,7 @@ func (f *FSHeader) check(name string) *gofs_file {
     return nil
 }
 
-func (f *FSHeader) generate_irp(name string, data []byte, irp_type int) *gofs_io_block {
+func (f *FSHeader) generateIRP(name string, data []byte, irp_type int) *govfsIoBlock {
     switch irp_type {
     case IRP_DELETE:
         /* DELETE */
@@ -270,10 +270,10 @@ func (f *FSHeader) generate_irp(name string, data []byte, irp_type int) *gofs_io
             return nil /* ERROR -- deleting non-existant file */
         }
 
-        irp := &gofs_io_block {
+        irp := &govfsIoBlock {
             file: file_header,
             name: name,
-            io_out: make(chan *gofs_io_block),
+            io_out: make(chan *govfsIoBlock),
 
             operation: IRP_DELETE,
         }
@@ -286,11 +286,11 @@ func (f *FSHeader) generate_irp(name string, data []byte, irp_type int) *gofs_io
             return nil
         }
 
-        irp := &gofs_io_block{
+        irp := &govfsIoBlock{
             file: file_header,
             name: name,
             data: make([]byte, len(data)),
-            io_out: make(chan *gofs_io_block),
+            io_out: make(chan *govfsIoBlock),
 
             operation: IRP_WRITE, /* write IRP request */
         }
@@ -300,10 +300,10 @@ func (f *FSHeader) generate_irp(name string, data []byte, irp_type int) *gofs_io
 
     case IRP_CREATE:
         /* CREATE IRP */
-        irp := &gofs_io_block{
+        irp := &govfsIoBlock{
             name: name,
             operation: IRP_CREATE,
-            io_out: make(chan *gofs_io_block),
+            io_out: make(chan *govfsIoBlock),
         }
 
         return irp
@@ -312,7 +312,7 @@ func (f *FSHeader) generate_irp(name string, data []byte, irp_type int) *gofs_io
     return nil
 }
 
-func (f *FSHeader) Create(name string) (*gofs_file, error) {
+func (f *FSHeader) Create(name string) (*govfsFile, error) {
     if file := f.check(name); file != nil {
         return nil, util.RetErrStr("create: File already exists")
     }
@@ -322,7 +322,7 @@ func (f *FSHeader) Create(name string) (*gofs_file, error) {
     }
 
     f.create_sync.Lock()
-    var irp *gofs_io_block = f.generate_irp(name, nil, IRP_CREATE)
+    var irp *govfsIoBlock = f.generateIRP(name, nil, IRP_CREATE)
 
     f.io_in <- irp
     output_irp := <- irp.io_out
@@ -340,7 +340,7 @@ func (f *FSHeader) Create(name string) (*gofs_file, error) {
  */
 type Reader struct {
     Name string
-    File *gofs_file
+    File *govfsFile
     Hdr *FSHeader
     Offset int
 }
@@ -403,7 +403,7 @@ func (f *FSHeader) Read(name string) ([]byte, error) {
 }
 
 func (f *FSHeader) Delete(name string) error {
-    irp := f.generate_irp(name, nil, IRP_DELETE)
+    irp := f.generateIRP(name, nil, IRP_DELETE)
     if irp == nil {
         return util.RetErrStr("delete: File does not exist") /* ERROR -- File does not exist */
     }
@@ -420,7 +420,7 @@ func (f *FSHeader) Delete(name string) error {
  */
 type Writer struct {
     Name string
-    File *gofs_file
+    File *govfsFile
     Hdr *FSHeader
 }
 
@@ -456,7 +456,7 @@ func (f *FSHeader) Write(name string, d []byte) error {
         return util.RetErrStr("write: Cannot write to nonexistent file")
     }
 
-    irp := f.generate_irp(name, d, IRP_WRITE)
+    irp := f.generateIRP(name, d, IRP_WRITE)
     if irp == nil {
         return util.RetErrStr("write: Failed to generate IRP_WRITE") /* FAILURE */
     }
@@ -472,7 +472,7 @@ func (f *FSHeader) Write(name string, d []byte) error {
     return output_irp.status
 }
 
-func (f *FSHeader) write_internal(d *gofs_file, data []byte) int {
+func (f *FSHeader) writeInternal(d *govfsFile, data []byte) int {
     if len(data) == 0 {
         return len(data)
     }
@@ -494,7 +494,7 @@ func (f *FSHeader) write_internal(d *gofs_file, data []byte) int {
 
 func (f *FSHeader) UnmountDB(flags int /* FLAG_COMPRESS_FILES */) error {
     type comp_data struct {
-        file *gofs_file
+        file *govfsFile
         raw RawFile
     }
 
@@ -550,12 +550,12 @@ func (f *FSHeader) UnmountDB(flags int /* FLAG_COMPRESS_FILES */) error {
     }
 
     /* Do not count "/" as a file, since it is not sent in channel */
-    total_files := f.get_file_count() - 1
+    total_files := f.GetFileCount() - 1
 
     /*
      * Generate the primary filesystem header and write it to the fs_stream
      */
-    hdr := raw_stream_hdr {
+    hdr := rawStreamHeader {
         Signature:  FS_SIGNATURE, /* This signature may be modified in the configuration -- FIXME */
         FileCount:  total_files }
 
@@ -563,7 +563,7 @@ func (f *FSHeader) UnmountDB(flags int /* FLAG_COMPRESS_FILES */) error {
     var stream *bytes.Buffer
 
     if REMOVE_FS_HEADER != true {
-        stream = func(hdr raw_stream_hdr) *bytes.Buffer {
+        stream = func(hdr rawStreamHeader) *bytes.Buffer {
             b := new(bytes.Buffer)
             e := gob.NewEncoder(b)
             if err := e.Encode(hdr); err != nil {
@@ -586,7 +586,7 @@ func (f *FSHeader) UnmountDB(flags int /* FLAG_COMPRESS_FILES */) error {
     close(commit_ch)
 
     /* Compress, encrypt, and write stream */
-    written, err := f.write_fs_stream(f.filename, stream, f.flags)
+    written, err := f.writeFsStream(f.filename, stream, f.flags)
     if err != nil || int(written) == 0 {
         return util.RetErrStr("Failure in writing raw fs stream")
     }
@@ -594,12 +594,12 @@ func (f *FSHeader) UnmountDB(flags int /* FLAG_COMPRESS_FILES */) error {
     return err
 }
 
-func load_header(data []byte, filename string) (*FSHeader, error) {
+func loadHeader(data []byte, filename string) (*FSHeader, error) {
     ptr := bytes.NewBuffer(data) /* raw file stream */
 
     if REMOVE_FS_HEADER != true {
-        header, err := func(p *bytes.Buffer) (*raw_stream_hdr, error) {
-            output := new(raw_stream_hdr)
+        header, err := func(p *bytes.Buffer) (*rawStreamHeader, error) {
+            output := new(rawStreamHeader)
 
             d := gob.NewDecoder(p)
             err := d.Decode(output)
@@ -617,9 +617,9 @@ func load_header(data []byte, filename string) (*FSHeader, error) {
 
     output := &FSHeader{
         filename: filename,
-        meta:     make(map[string]*gofs_file),
+        meta:     make(map[string]*govfsFile),
     }
-    output.meta[s("/")] = new(gofs_file)
+    output.meta[s("/")] = new(govfsFile)
     output.meta[s("/")].filename = "/"
 
     /* Enumerate files */
@@ -648,7 +648,7 @@ func load_header(data []byte, filename string) (*FSHeader, error) {
             return nil, err
         }
 
-        output.meta[s(file_hdr.Name)] = &gofs_file{
+        output.meta[s(file_hdr.Name)] = &govfsFile{
             filename: file_hdr.Name,
             flags: file_hdr.Flags,
             data: nil,
@@ -699,7 +699,7 @@ func load_header(data []byte, filename string) (*FSHeader, error) {
  * Generate the key used to encrypt/decrypt the raw fs table. The key is composed of the
  *  MD5 sum of the hostname + the FS_SIGNATURE string
  */
-func get_fs_key() []byte {
+func getFsKey() []byte {
     host, _ := os.Hostname()
     host += FS_SIGNATURE
 
@@ -714,7 +714,7 @@ func get_fs_key() []byte {
  *  serialized fs table. Since no FSHeader exists yet, this method will not be apart of that
  *  structure, as per design choice
  */
-func read_fs_stream(name string, flags int) ([]byte, error) {
+func readFsStream(name string, flags int) ([]byte, error) {
     if _, err := os.Stat(name); os.IsNotExist(err) {
         return nil, err
     }
@@ -728,7 +728,7 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
 
     if (flags & FLAG_ENCRYPT) > 0 {
         /* The crypto key is composed of the MD5 of the hostname + the FS_SIGNATURE */
-        key := get_fs_key()
+        key := getFsKey()
 
         plaintext, err = cryptog.RC4_Decrypt(raw_file, &key)
         if err != nil {
@@ -763,7 +763,7 @@ func read_fs_stream(name string, flags int) ([]byte, error) {
 /*
  * Takes in the serialized fs table, compresses it, encrypts it and writes it to the disk
  */
-func (f *FSHeader) write_fs_stream(name string, data *bytes.Buffer, flags int) (uint, error) {
+func (f *FSHeader) writeFsStream(name string, data *bytes.Buffer, flags int) (uint, error) {
 
     var compressed = new(bytes.Buffer)
 
@@ -779,7 +779,7 @@ func (f *FSHeader) write_fs_stream(name string, data *bytes.Buffer, flags int) (
 
     if (flags & FLAG_ENCRYPT) > 0 {
         /* The crypto key will be the MD5 of the hostname string + the FS_SIGNATURE string */
-        key := get_fs_key()
+        key := getFsKey()
 
         /* Perform RC4 encryption */
         var err error
@@ -810,7 +810,7 @@ func (f *FSHeader) write_fs_stream(name string, data *bytes.Buffer, flags int) (
     return uint(written), nil
 }
 
-func (f *FSHeader) get_file_count() uint {
+func (f *FSHeader) GetFileCount() uint {
     var total uint = 0
     for range f.meta {
         total += 1
@@ -819,20 +819,20 @@ func (f *FSHeader) get_file_count() uint {
     return total
 }
 
-func (f *FSHeader) get_file_size(name string) (uint, error) {
+func (f *FSHeader) GetFileSize(name string) (uint, error) {
     file := f.check(name)
     if file == nil {
-        return 0, util.RetErrStr("get_file_size: File does not exist")
+        return 0, util.RetErrStr("GetFileSize: File does not exist")
     }
 
     return uint(len(file.data)), nil
 }
 
-func (f *FSHeader) get_total_filesizes() uint {
+func (f *FSHeader) GetTotalFilesizes() uint {
     return f.t_size
 }
 
-func (f *FSHeader) get_file_list() []string {
+func (f *FSHeader) GetFileList() []string {
     var output []string
 
     for k := range f.meta {
