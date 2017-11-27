@@ -602,8 +602,7 @@ func loadHeader(data []byte, filename string) (*FSHeader, error) {
             output := new(rawStreamHeader)
 
             d := gob.NewDecoder(p)
-            err := d.Decode(output)
-            if err != nil {
+            if err := d.Decode(output); err != nil {
                 return nil, err
             }
 
