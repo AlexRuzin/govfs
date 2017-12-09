@@ -30,6 +30,7 @@ import (
     "bytes"
     "runtime"
     "github.com/AlexRuzin/util"
+    "strconv"
 )
 
 const FS_DATABASE_FILE string = "test_db"
@@ -316,7 +317,7 @@ func TestFSReader(t *testing.T) {
         util.DebugOut(e)
     }
 
-    util.DebugOut("Total File Content Size: " + string(header.GetTotalFilesizes()))
+    util.DebugOut("Total File Content Size: " + strconv.Itoa(int(header.GetTotalFilesizes())))
 }
 
 func gen_raw_filename(suffix string) string {
