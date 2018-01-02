@@ -26,6 +26,7 @@ package govfs
 // create() can either create a folder or a file.
 // When a folder/file is created, make all subdirectories in the map as well
 // https://golang.org/src/encoding/gob/example_test.go
+// Fix all FLAG_COMPRESS operations -- causes a panic in CreateDatabase()
 
 /* TEST5
  * Supports:
