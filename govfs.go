@@ -66,14 +66,15 @@ const (
     IRP_CREATE                int = IRP_BASE + iota/* Create a new file or folder */
 )
 
+type FlagVal int
 const (
-    FLAG_FILE                 int = 1 << iota
-    FLAG_DIRECTORY            int = 1 << iota
-    FLAG_COMPRESS             int = 1 << iota /* Compression on the fs serialized output */
-    FLAG_ENCRYPT              int = 1 << iota /* Encryption on the fs serialized output */
-    FLAG_DB_LOAD              int = 1 << iota /* Loads the database */
-    FLAG_DB_CREATE            int = 1 << iota /* Creates the database */
-    FLAG_COMPRESS_FILES       int = 1 << iota /* Compresses files in the FS stream */
+    FLAG_FILE                 FlagVal = 1 << iota
+    FLAG_DIRECTORY            /* The target file is a directory */
+    FLAG_COMPRESS             /* Compression on the fs serialized output */
+    FLAG_ENCRYPT              /* Encryption on the fs serialized output */
+    FLAG_DB_LOAD              /* Loads the database */
+    FLAG_DB_CREATE            /* Creates the database */
+    FLAG_COMPRESS_FILES       /* Compresses files in the FS stream */
 )
 
 type FSHeader struct {
@@ -83,12 +84,12 @@ type FSHeader struct {
     t_size      uint /* Total size of all files */
     io_in       chan *govfsIoBlock
     create_sync sync.Mutex
-    flags       int /* Generic flags as passed in by CreateDatabase() */
+    flags       FlagVal /* Generic flags as passed in by CreateDatabase() */
 }
 
 type govfsFile struct {
     filename    string
-    flags       int /* FLAG_FILE, FLAG_DIRECTORY */
+    flags       FlagVal /* FLAG_FILE, FLAG_DIRECTORY */
     datasum     string
     data        []byte
     lock        sync.Mutex
@@ -100,7 +101,7 @@ type govfsIoBlock struct {
     data        []byte
     status      error
     operation   int /* 2 == purge, 3 == delete, 4 == write */
-    flags       int
+    flags       FlagVal
     io_out      chan *govfsIoBlock
 }
 
@@ -119,7 +120,7 @@ type rawStreamHeader struct {
  */
 type RawFile /* Export required for gob serializer */ struct {
     RawSum string
-    Flags int
+    Flags FlagVal
     Name string
     UnzippedLen int
 }
@@ -130,7 +131,7 @@ type RawFile /* Export required for gob serializer */ struct {
  *
  * Flags: FLAG_ENCRYPT, FLAG_COMPRESS
  */
-func CreateDatabase(name string, flags int) (*FSHeader, error) {
+func CreateDatabase(name string, flags FlagVal) (*FSHeader, error) {
     var header *FSHeader
 
     if (flags & FLAG_DB_LOAD) > 0 {
@@ -492,7 +493,7 @@ func (f *FSHeader) writeInternal(d *govfsFile, data []byte) int {
     return datalen
 }
 
-func (f *FSHeader) UnmountDB(flags int /* FLAG_COMPRESS_FILES */) error {
+func (f *FSHeader) UnmountDB(flags FlagVal /* FLAG_COMPRESS_FILES */) error {
     type comp_data struct {
         file *govfsFile
         raw RawFile
@@ -713,7 +714,7 @@ func getFsKey() []byte {
  *  serialized fs table. Since no FSHeader exists yet, this method will not be apart of that
  *  structure, as per design choice
  */
-func readFsStream(name string, flags int) ([]byte, error) {
+func readFsStream(name string, flags FlagVal) ([]byte, error) {
     if _, err := os.Stat(name); os.IsNotExist(err) {
         return nil, err
     }
@@ -762,7 +763,7 @@ func readFsStream(name string, flags int) ([]byte, error) {
 /*
  * Takes in the serialized fs table, compresses it, encrypts it and writes it to the disk
  */
-func (f *FSHeader) writeFsStream(name string, data *bytes.Buffer, flags int) (uint, error) {
+func (f *FSHeader) writeFsStream(name string, data *bytes.Buffer, flags FlagVal) (uint, error) {
 
     var compressed = new(bytes.Buffer)
 
