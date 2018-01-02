@@ -53,20 +53,20 @@ import (
 /*
  * Configurable constants
  */
-const MAX_FILENAME_LENGTH     int = 256
-const FS_SIGNATURE            string = "govfs_header" /* Cannot exceed 64 */
-const STREAM_PAD_LEN          int = 0 /* Length of the pad between two serialized RawFile structs */
-const REMOVE_FS_HEADER        bool = false /* Removes the header at the beginning of the serialized file - leave false */
-
-const IRP_BASE                int = 2 /* Start the IRP controller ID count from n */
-const (
-    IRP_PURGE                 int = IRP_BASE + iota /* Flush the entire database and all files */
-    IRP_DELETE                int = IRP_BASE + iota /* Delete a file/folder */
-    IRP_WRITE                 int = IRP_BASE + iota/* Write data to a file */
-    IRP_CREATE                int = IRP_BASE + iota/* Create a new file or folder */
-)
+const MAX_FILENAME_LENGTH     int       = 256
+const FS_SIGNATURE            string    = "govfs_header"    /* Cannot exceed 64 */
+const STREAM_PAD_LEN          int       = 0                 /* Length of the pad between two serialized RawFile structs */
+const REMOVE_FS_HEADER        bool      = false             /* Removes the header at the beginning of the serialized file - leave false */
 
 type FlagVal int
+const IRP_BASE                FlagVal = 2 /* Start the IRP controller ID count from n */
+const (
+    IRP_PURGE                 FlagVal = IRP_BASE + iota /* Flush the entire database and all files */
+    IRP_DELETE                /* Delete a file/folder */
+    IRP_WRITE                 /* Write data to a file */
+    IRP_CREATE                /* Create a new file or folder */
+)
+
 const (
     FLAG_FILE                 FlagVal = 1 << iota
     FLAG_DIRECTORY            /* The target file is a directory */
@@ -100,7 +100,7 @@ type govfsIoBlock struct {
     name        string
     data        []byte
     status      error
-    operation   int /* 2 == purge, 3 == delete, 4 == write */
+    operation   FlagVal /* 2 == purge, 3 == delete, 4 == write */
     flags       FlagVal
     io_out      chan *govfsIoBlock
 }
@@ -262,7 +262,7 @@ func (f *FSHeader) check(name string) *govfsFile {
     return nil
 }
 
-func (f *FSHeader) generateIRP(name string, data []byte, irp_type int) *govfsIoBlock {
+func (f *FSHeader) generateIRP(name string, data []byte, irp_type FlagVal) *govfsIoBlock {
     switch irp_type {
     case IRP_DELETE:
         /* DELETE */
