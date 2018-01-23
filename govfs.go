@@ -418,6 +418,28 @@ func (f *FSHeader) Delete(name string) error {
 }
 
 /*
+ * Commits in-memory objects to the disk
+ */
+func (f *FSHeader) Commit() (*FSHeader, error) {
+    f.UnmountDB(0)
+
+    if _, err := os.Stat(f.filename); os.IsNotExist(err) {
+        return nil, err
+    }
+
+    var header, err = CreateDatabase(f.filename, FLAG_DB_LOAD)
+    if err != nil {
+        return nil, err
+    }
+
+    if err := header.StartIOController(); err != nil {
+        return nil, err
+    }
+
+    return header, nil
+}
+
+/*
  * Writer interface
  */
 type Writer struct {
