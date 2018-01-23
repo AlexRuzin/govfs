@@ -255,6 +255,13 @@ func (f *FSHeader) StartIOController() error {
     return nil
 }
 
+/*
+ * Exported method to check for object existence in db
+ */
+func (f *FSHeader) Check(name string) *govfsFile {
+    return f.check(name)
+}
+
 func (f *FSHeader) check(name string) *govfsFile {
     if sum := s(name); f.meta[sum] != nil {
         return f.meta[sum]
