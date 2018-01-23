@@ -842,6 +842,25 @@ func (f *FSHeader) GetFileCount() uint {
     return total
 }
 
+/*
+ * Retrieves the file listing in a specific directrory. NOTE: The
+ *  `dir` parameter must contain a trailing "/"
+ */
+func (f *FSHeader) GetFileListDirectory(dir string) ([]string, error) {
+	var output []string
+	for _, v := range f.meta {
+		if strings.Contains(v.filename, dir) {
+			output = append(output, v.filename)
+		}
+	}
+
+	if len(output) == 0 {
+		return nil, nil
+	}
+
+	return output, nil
+}
+
 func (f *FSHeader) GetFileSize(name string) (uint, error) {
     file := f.check(name)
     if file == nil {
