@@ -165,7 +165,16 @@ func TestFSWriter(t *testing.T) {
         drive_fail("TEST10: Failed to read data from file3", t)
     }
     util.DebugOut("[+] Test 10 PASS")
-    
+
+    /* Test GetFileListDirectory */
+    fileEnum, err := header.GetFileListDirectory("/folder1/")
+    if err != nil {
+        drive_fail("TEST10.1: Failed to retrieve file listing", t)
+    }
+    for _, v := range fileEnum {
+        util.DebugOut(v)
+    }
+
     /*
      * Write other data to file0
      */
