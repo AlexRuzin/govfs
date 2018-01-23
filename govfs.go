@@ -258,8 +258,13 @@ func (f *FSHeader) StartIOController() error {
 /*
  * Exported method to check for object existence in db
  */
-func (f *FSHeader) Check(name string) *govfsFile {
-    return f.check(name)
+func (f *FSHeader) Check(name string) bool {
+    t := f.check(name)
+    if t == nil {
+        return false
+    } 
+
+    return true
 }
 
 func (f *FSHeader) check(name string) *govfsFile {
