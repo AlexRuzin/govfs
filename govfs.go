@@ -86,6 +86,7 @@ type FSHeader struct {
     io_in       chan *govfsIoBlock
     create_sync sync.Mutex
     flags       FlagVal /* Generic flags as passed in by CreateDatabase() */
+    stale       bool
 }
 
 type govfsFile struct {
@@ -154,6 +155,7 @@ func CreateDatabase(name string, flags FlagVal) (*FSHeader, error) {
         header = &FSHeader{
             filename: name,
             meta:     make(map[string]*govfsFile),
+            stale:    false,
         }
 
         /* Generate the standard "/" file */
@@ -178,6 +180,10 @@ func (f *FSHeader) StartIOController() error {
     go func (f *FSHeader) {
         for {
             var ioh = <- header.io_in
+
+            if f.stale == true {
+                return
+            }
 
             switch ioh.operation {
             case IRP_PURGE:
@@ -438,6 +444,7 @@ func (f *FSHeader) Commit() (*FSHeader, error) {
     if _, err := os.Stat(f.filename); os.IsNotExist(err) {
         return nil, err
     }
+    f.stale = true
 
     var header, err = CreateDatabase(f.filename, FLAG_DB_LOAD)
     if err != nil {
