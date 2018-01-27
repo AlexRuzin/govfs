@@ -866,18 +866,18 @@ func (f *FSHeader) GetFileCount() uint {
  *  `dir` parameter must contain a trailing "/"
  */
 func (f *FSHeader) GetFileListDirectory(dir string) ([]string, error) {
-	var output []string
-	for _, v := range f.meta {
-		if strings.Contains(v.filename, dir) {
-			output = append(output, v.filename)
-		}
-	}
+    var output []string
+    for _, v := range f.meta {
+        if strings.Contains(v.filename, dir) {
+            output = append(output, v.filename)
+        }
+    }
 
-	if len(output) == 0 {
-		return nil, nil
-	}
+    if len(output) == 0 {
+        return nil, nil
+    }
 
-	return output, nil
+    return output, nil
 }
 
 func (f *FSHeader) GetFileSize(name string) (uint, error) {
