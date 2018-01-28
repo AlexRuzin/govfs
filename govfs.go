@@ -38,17 +38,18 @@ package govfs
 
 import (
     "os"
+    "bytes"
+    "sync"
+    "strings"
+    "io"
+    "io/ioutil"
     "crypto/md5"
     "encoding/hex"
     "encoding/gob"
     "compress/gzip"
-    "bytes"
-    "sync"
-    "strings"
-    "github.com/AlexRuzin/cryptog"
-    "io"
-    "io/ioutil"
+
     "github.com/AlexRuzin/util"
+    "github.com/AlexRuzin/cryptog"
 )
 
 /*
