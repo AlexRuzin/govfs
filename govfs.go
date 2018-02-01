@@ -447,7 +447,8 @@ func (f *FSHeader) Commit() (*FSHeader, error) {
     }
     f.stale = true
 
-    var header, err = CreateDatabase(f.filename, FLAG_DB_LOAD)
+    var header, err = CreateDatabase(f.filename,
+        (f.flags & (FLAG_COMPRESS | FLAG_ENCRYPT)) | FLAG_DB_LOAD)
     if err != nil {
         return nil, err
     }
