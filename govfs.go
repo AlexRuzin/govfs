@@ -333,13 +333,13 @@ func (f *FSHeader) generateIRP(name string, data []byte, irp_type FlagVal) *govf
     return nil
 }
 
-func (f *FSHeader) Create(name string) (*govfsFile, error) {
+func (f *FSHeader) Create(name string) error {
     if file := f.check(name); file != nil {
-        return nil, util.RetErrStr("create: File already exists")
+        return util.RetErrStr("create: File already exists")
     }
 
     if len(name) > MAX_FILENAME_LENGTH {
-        return nil, util.RetErrStr("create: File name is too long")
+        return util.RetErrStr("create: File name is too long")
     }
 
     f.create_sync.Lock()
@@ -349,11 +349,11 @@ func (f *FSHeader) Create(name string) (*govfsFile, error) {
     output_irp := <- irp.io_out
     f.create_sync.Unlock()
     if output_irp.file == nil {
-        return nil, output_irp.status
+        return output_irp.status
     }
     close(output_irp.io_out)
 
-    return output_irp.file, nil
+    return nil
 }
 
 /*
