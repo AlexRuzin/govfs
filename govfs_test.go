@@ -49,7 +49,7 @@ func TestFSWriter(t *testing.T) {
         os.Remove(filename)
     }
 
-    var header, err = CreateDatabase(filename, FLAG_DB_CREATE)
+    var header, err = CreateDatabase(filename, FLAG_DB_CREATE | FLAG_ENCRYPT | FLAG_COMPRESS)
     if header == nil || err != nil {
         drive_fail(err.Error(), t)
     }
@@ -289,7 +289,7 @@ func TestFSReader(t *testing.T) {
         drive_fail("error: Standard raw fs stream " + filename + " does not exist", t)
     }
 
-    header, err := CreateDatabase(filename, FLAG_DB_LOAD)
+    header, err := CreateDatabase(filename, FLAG_DB_LOAD | FLAG_COMPRESS | FLAG_ENCRYPT)
     if header == nil || err != nil {
         drive_fail("TEST1: Failed to obtain header", t)
     }
