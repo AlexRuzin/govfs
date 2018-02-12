@@ -83,7 +83,7 @@ type FSHeader struct {
     filename    string
     key         [16]byte
     meta        map[string]*govfsFile
-    t_size      uint /* Total size of all files */
+    t_size      int /* Total size of all files */
     io_in       chan *govfsIoBlock
     create_sync sync.Mutex
     flags       FlagVal /* Generic flags as passed in by CreateDatabase() */
@@ -523,9 +523,9 @@ func (f *FSHeader) writeInternal(d *govfsFile, data []byte) int {
     }
 
     if uint(len(data)) >= uint(len(d.data)) {
-        f.t_size += uint(len(data)) - uint(len(d.data))
+        f.t_size += len(data) - len(d.data)
     } else {
-        f.t_size -= uint(len(d.data)) - uint(len(data))
+        f.t_size -= len(d.data) - len(data)
     }
 
     d.data = make([]byte, len(data))
@@ -722,11 +722,11 @@ func loadHeader(data []byte, filename string) (*FSHeader, error) {
                 if decompressed_len != file_hdr.UnzippedLen || err != nil {
                     return nil, err
                 }
-                output.t_size += uint(decompressed_len)
+                output.t_size += decompressed_len
             } else {
                 output.meta[s(file_hdr.Name)].data = make([]byte, file_hdr.UnzippedLen)
                 copy(output.meta[s(file_hdr.Name)].data, raw_file_data)
-                output.t_size += uint(file_hdr.UnzippedLen)
+                output.t_size += file_hdr.UnzippedLen
             }
 
             /* Verifiy sums */
@@ -891,7 +891,7 @@ func (f *FSHeader) GetFileSize(name string) (uint, error) {
     return uint(len(file.data)), nil
 }
 
-func (f *FSHeader) GetTotalFilesizes() uint {
+func (f *FSHeader) GetTotalFilesizes() int {
     return f.t_size
 }
 
