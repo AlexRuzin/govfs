@@ -59,7 +59,7 @@ func TestFSWriter(t *testing.T) {
     util.DebugOut("[+] Test 1 PASS")
     
     // The root file "/" must at least exist
-    if file, err := header.Create("/"); file != nil && err == nil {
+    if err := header.Create("/"); err == nil {
         drive_fail("TEST2: Failed to return root handle", t)
     }
     util.DebugOut("[+] Test 2 PASS")
@@ -84,7 +84,7 @@ func TestFSWriter(t *testing.T) {
     /*
      * Create empty file file9
      */
-    if file, err := header.Create("/folder5/folder4/folder2/file9"); file == nil || err != nil {
+    if err := header.Create("/folder5/folder4/folder2/file9"); err != nil {
         drive_fail("TEST4.1: file9 cannot be created", t)
     }
     util.DebugOut("[+] Test 4.1 PASS")
@@ -92,7 +92,7 @@ func TestFSWriter(t *testing.T) {
     /*
      * Attempt to create a new file0
      */
-    if file, err := header.Create("/folder0/folder0/file0"); file == nil || err != nil {
+    if err := header.Create("/folder0/folder0/file0"); err != nil {
         drive_fail("TEST5.0: file0 cannot be created", t)
     }
     util.DebugOut("[+] Test 5.0 PASS")
@@ -100,7 +100,7 @@ func TestFSWriter(t *testing.T) {
     /*
      * Attempt to create a new file0, this will fail since it should already exist
      */
-    if file, err := header.Create("/folder0/folder0/file0"); file != nil && err == nil {
+    if err := header.Create("/folder0/folder0/file0"); err == nil {
         drive_fail("TEST5.1: file0 cannot be created twice", t)
     }
     util.DebugOut("[+] Test 5.1 PASS")
@@ -126,7 +126,7 @@ func TestFSWriter(t *testing.T) {
     /*
      * Attempt to create a new file3
      */
-    if file, err := header.Create("/folder1/folder0/file3"); file == nil || err != nil {
+    if err := header.Create("/folder1/folder0/file3"); err != nil {
         drive_fail("TEST7: file3 cannot be created", t)
     }
     util.DebugOut("[+] Test 7 PASS")
@@ -152,7 +152,7 @@ func TestFSWriter(t *testing.T) {
      * Read the written data from file0 and compare
      */
     output_data, _ := header.Read("/folder0/folder0/file0")
-    if output_data == nil || len(output_data) != len(data) || header.t_size - 7 /* len(file3) */ != uint(len(data)) {
+    if output_data == nil || len(output_data) != len(data) || header.t_size - 7 /* len(file3) */ != len(data) {
         drive_fail("TEST9: Failed to read data from file0", t)
     }
     util.DebugOut("[+] Test 9 PASS")
@@ -161,7 +161,7 @@ func TestFSWriter(t *testing.T) {
      * Read the written data from file3 and compare
      */
     output_data, _ = header.Read("/folder1/folder0/file3")
-    if output_data == nil || len(output_data) != len(data2) || header.t_size - 4 /* len(file0) */ != uint(len(data2)) {
+    if output_data == nil || len(output_data) != len(data2) || header.t_size - 4 /* len(file0) */ != len(data2) {
         drive_fail("TEST10: Failed to read data from file3", t)
     }
     util.DebugOut("[+] Test 10 PASS")
@@ -196,7 +196,7 @@ func TestFSWriter(t *testing.T) {
     /*
      * Attempt to create a new file5. This will be a blank file
      */
-    if file, err := header.Create("/folder2/file7"); file == nil || err != nil {
+    if err := header.Create("/folder2/file7"); err != nil {
         drive_fail("TEST13: file3 cannot be created", t)
     }
     util.DebugOut("[+] Test 13 PASS")
@@ -209,7 +209,7 @@ func TestFSWriter(t *testing.T) {
     /*
      * Create just a folder
      */
-    if file, err := header.Create("/folder2/file5/"); file == nil || err != nil {
+    if err := header.Create("/folder2/file5/"); err != nil {
         drive_fail("TEST15: folder file5 cannot be created", t)
     }
     util.DebugOut("[+] Test 15 PASS")
@@ -272,7 +272,7 @@ func TestFSWriter(t *testing.T) {
         drive_fail("TEST16: Failed to commit database", t)
     }
     util.DebugOut("[+] Test 16 PASS. Raw FS stream written to: " + header.filename)
-    util.DebugOut("Total File Content Size: " + string(header.GetTotalFilesizes()))
+    util.DebugOut("Total File Content Size: " + strconv.Itoa(header.GetTotalFilesizes()))
 
     time.Sleep(10000)
 }
@@ -302,7 +302,7 @@ func TestFSReader(t *testing.T) {
     /*
      * Tests the Writer interface
      */
-    if file, err := header.Create("/NewestFolder/Subdirectory/GoodBoy.bin"); file == nil || err != nil {
+    if err := header.Create("/NewestFolder/Subdirectory/GoodBoy.bin"); err != nil {
         drive_fail("TEST2.1: folder file5 cannot be created", t)
     }
 
