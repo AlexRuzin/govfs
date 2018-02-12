@@ -787,9 +787,12 @@ func readFsStream(name string, flags FlagVal) ([]byte, error) {
 
     if (flags & FLAG_COMPRESS) > 0 {
         var b bytes.Buffer
-        b.Read(plaintext)
+        b.Write(plaintext)
 
         reader, err := gzip.NewReader(&b)
+        if err != nil {
+            return nil, err
+        }
         defer reader.Close()
 
         decompressed, err = ioutil.ReadAll(reader)
@@ -827,7 +830,7 @@ func (f *FSHeader) writeFsStream(name string, data *bytes.Buffer, flags FlagVal)
 
         /* Perform RC4 encryption */
         var err error
-        ciphertext, err = cryptog.RC4_Encrypt(data.Bytes(), &key)
+        ciphertext, err = cryptog.RC4_Encrypt(compressed.Bytes(), &key)
         if err != nil {
             return 0, err
         }
