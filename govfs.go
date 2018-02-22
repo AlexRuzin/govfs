@@ -559,26 +559,21 @@ func (f *FSHeader) UnmountDB(flags FlagVal /* FLAG_COMPRESS_FILES */) error {
                 return
             }
 
-            var data_stream []byte
+            var dataStream []byte
             if (d.file.flags & FLAG_FILE) > 0 && len(d.file.data) > 0 {
                 d.raw.UnzippedLen = len(d.file.data)
 
                 if (flags & FLAG_COMPRESS_FILES) > 0 {
                     d.raw.Flags |= FLAG_COMPRESS_FILES
 
-                    var zip_buf= bytes.NewBuffer(nil)
-                    gzip_writer := gzip.NewWriter(zip_buf)
-                    gzip_writer.Write(d.file.data)
-
-                    gzipped := bytes.Buffer{}
-                    gzipped.ReadFrom(zip_buf)
-
-                    data_stream = make([]byte, gzipped.Len())
-                    copy(data_stream, gzipped.Bytes())
-                    gzip_writer.Close()
+                    var err error = nil
+                    dataStream, err = util.CompressStream(d.file.data)
+                    if err != nil {
+                        util.ThrowN(err.Error())
+                    }
                 } else {
-                    data_stream = make([]byte, d.raw.UnzippedLen)
-                    copy(data_stream, d.file.data)
+                    dataStream = make([]byte, d.raw.UnzippedLen)
+                    copy(dataStream, d.file.data)
                 }
             }
 
@@ -586,8 +581,8 @@ func (f *FSHeader) UnmountDB(flags FlagVal /* FLAG_COMPRESS_FILES */) error {
             enc := gob.NewEncoder(&output)
             enc.Encode(d.raw)
 
-            if len(data_stream) > 0 {
-                output.Write(data_stream)
+            if len(dataStream) > 0 {
+                output.Write(dataStream)
             }
 
             commit_ch <- output
