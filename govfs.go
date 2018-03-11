@@ -46,7 +46,6 @@ import (
     "crypto/md5"
     "encoding/hex"
     "encoding/gob"
-    "compress/gzip"
 
     "github.com/AlexRuzin/util"
     "github.com/AlexRuzin/cryptog"
@@ -61,7 +60,10 @@ const STREAM_PAD_LEN          int       = 0                 /* Length of the pad
 const REMOVE_FS_HEADER        bool      = false             /* Removes the header at the beginning of the serialized file - leave false */
 
 type FlagVal int
-const IRP_BASE                FlagVal = 2 /* Start the IRP controller ID count from n */
+const IRP_BASE                FlagVal = 2 /*
+                                           * Start the IRP controller ID count from n > 1.
+                                           *  Altering this may break logic in the I/O controller
+                                           */
 const (
     IRP_PURGE                 FlagVal = IRP_BASE + iota /* Flush the entire database and all files */
     IRP_DELETE                /* Delete a file/folder */
@@ -76,7 +78,11 @@ const (
     FLAG_ENCRYPT              /* Encryption on the fs serialized output */
     FLAG_DB_LOAD              /* Loads the database */
     FLAG_DB_CREATE            /* Creates the database */
-    FLAG_COMPRESS_FILES       /* Compresses files in the FS stream */
+    FLAG_COMPRESS_FILES       /*
+                               * Compresses files in the FS stream -- also used as a switch to determine
+                               *  if a file should be compressed due to the chance of high entropy. If compression
+                               *  takes places, then this flag is set on comp_file.Flags
+                               */
 )
 
 type FSHeader struct {
@@ -559,11 +565,11 @@ func (f *FSHeader) UnmountDB(flags FlagVal /* FLAG_COMPRESS_FILES */) error {
                 return
             }
 
-            var dataStream []byte
+            var dataStream []byte = d.file.data
             if (d.file.flags & FLAG_FILE) > 0 && len(d.file.data) > 0 {
                 d.raw.UnzippedLen = len(d.file.data)
 
-                if (flags & FLAG_COMPRESS_FILES) > 0 {
+                if (flags & FLAG_COMPRESS_FILES) > 0 && util.GetCompressedSize(d.file.data) < len(d.file.data) {
                     d.raw.Flags |= FLAG_COMPRESS_FILES
 
                     var err error = nil
@@ -571,9 +577,6 @@ func (f *FSHeader) UnmountDB(flags FlagVal /* FLAG_COMPRESS_FILES */) error {
                     if err != nil {
                         util.ThrowN(err.Error())
                     }
-                } else {
-                    dataStream = make([]byte, d.raw.UnzippedLen)
-                    copy(dataStream, d.file.data)
                 }
             }
 
