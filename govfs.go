@@ -667,7 +667,7 @@ func loadHeader(data []byte, filename string) (*FSHeader, error) {
             break
         }
 
-        file_hdr, err := func (p *bytes.Buffer) (*RawFile, error) {
+        fileHeader, err := func (p *bytes.Buffer) (*RawFile, error) {
             output := &RawFile{}
 
             d := gob.NewDecoder(p)
@@ -687,45 +687,35 @@ func loadHeader(data []byte, filename string) (*FSHeader, error) {
             return nil, err
         }
 
-        output.meta[s(file_hdr.Name)] = &govfsFile{
-            filename: file_hdr.Name,
-            flags: file_hdr.Flags,
+        output.meta[s(fileHeader.Name)] = &govfsFile{
+            filename: fileHeader.Name,
+            flags: fileHeader.Flags,
             data: nil,
             datasum: "",
         }
 
         //output.meta[s(file_hdr.Name)].data = make([]byte, decompressed_len)
-        if file_hdr.UnzippedLen > 0 {
-            output.meta[s(file_hdr.Name)].datasum = file_hdr.RawSum
+        if fileHeader.UnzippedLen > 0 {
+            output.meta[s(fileHeader.Name)].datasum = fileHeader.RawSum
 
-            var raw_file_data = make([]byte, file_hdr.UnzippedLen)
-            ptr.Read(raw_file_data)
+            var rawFileData = make([]byte, fileHeader.UnzippedLen)
+            ptr.Read(rawFileData)
 
-            if (file_hdr.Flags & FLAG_COMPRESS_FILES) > 0 {
-                var data_ptr *[]byte = &output.meta[s(file_hdr.Name)].data
-                *data_ptr = make([]byte, file_hdr.UnzippedLen)
-
-                zipped := bytes.NewBuffer(raw_file_data)
-                gzipd, err := gzip.NewReader(zipped)
-                if err != nil {
-                    gzipd.Close()
+            if (fileHeader.Flags & FLAG_COMPRESS_FILES) > 0 {
+                var streamStatus error = nil
+                output.meta[s(fileHeader.Name)].data, streamStatus = util.DecompressStream(rawFileData)
+                if streamStatus != nil {
                     return nil, err
                 }
-
-                gzipd.Close()
-                decompressed_len, err := gzipd.Read(*data_ptr)
-                if decompressed_len != file_hdr.UnzippedLen || err != nil {
-                    return nil, err
-                }
-                output.t_size += decompressed_len
+                output.t_size = len(output.meta[s(fileHeader.Name)].data)
             } else {
-                output.meta[s(file_hdr.Name)].data = make([]byte, file_hdr.UnzippedLen)
-                copy(output.meta[s(file_hdr.Name)].data, raw_file_data)
-                output.t_size += file_hdr.UnzippedLen
+                output.meta[s(fileHeader.Name)].data = make([]byte, fileHeader.UnzippedLen)
+                copy(output.meta[s(fileHeader.Name)].data, rawFileData)
+                output.t_size += fileHeader.UnzippedLen
             }
 
             /* Verifiy sums */
-            if sum := s(string(output.meta[s(file_hdr.Name)].data)); sum != output.meta[s(file_hdr.Name)].datasum {
+            if sum := s(string(output.meta[s(fileHeader.Name)].data)); sum != output.meta[s(fileHeader.Name)].datasum {
                 return nil, util.RetErrStr("Invalid file sum")
             }
         }
