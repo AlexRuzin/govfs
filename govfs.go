@@ -74,11 +74,10 @@ const (
 const (
     FLAG_FILE                 FlagVal = 1 << iota
     FLAG_DIRECTORY            /* The target file is a directory */
-    FLAG_COMPRESS             /* Compression on the fs serialized output */
     FLAG_ENCRYPT              /* Encryption on the fs serialized output */
     FLAG_DB_LOAD              /* Loads the database */
     FLAG_DB_CREATE            /* Creates the database */
-    FLAG_COMPRESS_FILES       /*
+    FLAG_COMPRESS             /*
                                * Compresses files in the FS stream -- also used as a switch to determine
                                *  if a file should be compressed due to the chance of high entropy. If compression
                                *  takes places, then this flag is set on comp_file.Flags
@@ -569,8 +568,8 @@ func (f *FSHeader) UnmountDB(flags FlagVal /* FLAG_COMPRESS_FILES */) error {
             if (d.file.flags & FLAG_FILE) > 0 && len(d.file.data) > 0 {
                 d.raw.UnzippedLen = len(d.file.data)
 
-                if (flags & FLAG_COMPRESS_FILES) > 0 && util.GetCompressedSize(d.file.data) < len(d.file.data) {
-                    d.raw.Flags |= FLAG_COMPRESS_FILES
+                if (flags & FLAG_COMPRESS) > 0 && util.GetCompressedSize(d.file.data) < len(d.file.data) {
+                    d.raw.Flags |= FLAG_COMPRESS
 
                     var err error = nil
                     dataStream, err = util.CompressStream(d.file.data)
@@ -704,7 +703,7 @@ func loadHeader(data []byte, filename string) (*FSHeader, error) {
             var rawFileData = make([]byte, fileHeader.UnzippedLen)
             ptr.Read(rawFileData)
 
-            if (fileHeader.Flags & FLAG_COMPRESS_FILES) > 0 {
+            if (fileHeader.Flags & FLAG_COMPRESS) > 0 {
                 var streamStatus error = nil
                 output.meta[s(fileHeader.Name)].data, streamStatus = util.DecompressStream(rawFileData)
                 if streamStatus != nil {
