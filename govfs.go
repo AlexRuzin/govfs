@@ -781,18 +781,10 @@ func readFsStream(name string, flags FlagVal) ([]byte, error) {
     var decompressed []byte
 
     if (flags & FLAG_COMPRESS) > 0 {
-        var b bytes.Buffer
-        b.Write(plaintext)
-
-        reader, err := gzip.NewReader(&b)
-        if err != nil {
-            return nil, err
-        }
-        defer reader.Close()
-
-        decompressed, err = ioutil.ReadAll(reader)
-        if err != nil {
-            return nil, err
+        var streamStatus error = nil
+        decompressed, streamStatus = util.DecompressStream(plaintext)
+        if streamStatus != nil {
+            return nil, streamStatus
         }
     } else {
         decompressed = make([]byte, len(plaintext))
