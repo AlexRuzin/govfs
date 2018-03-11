@@ -802,9 +802,16 @@ func (f *FSHeader) writeFsStream(name string, data *bytes.Buffer, flags FlagVal)
     var compressed = new(bytes.Buffer)
 
     if (flags & FLAG_COMPRESS) > 0 {
-        w := gzip.NewWriter(compressed)
-        w.Write(data.Bytes())
-        w.Close()
+        var (
+            streamStatus    error = nil
+            out             []byte
+        )
+        out, streamStatus = util.CompressStream(data.Bytes())
+        if streamStatus != nil {
+            return 0, streamStatus
+        }
+
+        compressed.Write(out)
     } else {
         compressed.Write(data.Bytes())
     }
