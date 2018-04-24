@@ -445,6 +445,8 @@ func (f *FSHeader) Delete(name string) error {
  * Commits in-memory objects to the disk
  */
 func (f *FSHeader) Commit() (*FSHeader, error) {
+    var existingFlags FlagVal = (f.flags & FLAG_COMPRESS) | (f.flags & FLAG_ENCRYPT)
+
     f.UnmountDB(0)
 
     if _, err := os.Stat(f.filename); os.IsNotExist(err) {
@@ -452,8 +454,7 @@ func (f *FSHeader) Commit() (*FSHeader, error) {
     }
     f.stale = true
 
-    var header, err = CreateDatabase(f.filename,
-        (f.flags & (FLAG_COMPRESS | FLAG_ENCRYPT)) | FLAG_DB_LOAD)
+    var header, err = CreateDatabase(f.filename, existingFlags | FLAG_DB_LOAD)
     if err != nil {
         return nil, err
     }
